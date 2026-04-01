@@ -23,7 +23,7 @@ class Question(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     title: str = Field(index=True, max_length=200)
     description: str
-    day_unlock: bool = Field(default=False, index=True)
+    day_unlock: int = Field(ge=1, index=True)
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         sa_type=DateTime(timezone=True),
@@ -36,6 +36,7 @@ class Recording(SQLModel, table=True):
     question_id: int = Field(foreign_key="question.id", index=True)
     audio_url: str = Field(max_length=500)
     duration_seconds: int = Field(gt=0)
+    size_bytes: int = Field(gt=0)
     attempt_type: AttemptType = Field(default=AttemptType.normal)
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),

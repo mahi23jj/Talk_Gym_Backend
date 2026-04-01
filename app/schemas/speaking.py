@@ -10,6 +10,7 @@ from app.models.speaking import AttemptType, SenderType
 class QuestionCreateSchema(BaseModel):
     title: str = Field(min_length=3, max_length=200)
     description: str = Field(min_length=10)
+    day_unlock: int = Field(ge=1)
 
 
 class QuestionReadSchema(QuestionCreateSchema):
@@ -24,6 +25,7 @@ class RecordingCreateSchema(BaseModel):
     question_id: int = Field(gt=0)
     audio_url: str = Field(min_length=5, max_length=500)
     duration_seconds: int = Field(gt=0)
+    size_bytes: int = Field(gt=0)
     attempt_type: AttemptType = AttemptType.normal
 
 

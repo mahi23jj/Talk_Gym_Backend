@@ -26,6 +26,8 @@ def init_db() -> None:
         Question,
         Recording,
     )
+    from app.models.request_log import RequestLog  # noqa: F401
+    from app.models.usage import AIUsage  # noqa: F401
 
     SQLModel.metadata.create_all(engine)
 

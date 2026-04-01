@@ -19,6 +19,13 @@ def init_db() -> None:
     """Initialize the database."""
     # Ensure model metadata is registered before creating tables.
     from app.models.auth import User  # noqa: F401
+    from app.models.speaking import (  # noqa: F401
+        AIAnalysis,
+        ChatMessage,
+        ChatSession,
+        Question,
+        Recording,
+    )
 
     SQLModel.metadata.create_all(engine)
 

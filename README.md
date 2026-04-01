@@ -21,8 +21,6 @@ Talk_Gym_Backend/
 │   └── main.py
 ├── tests/
 │   └── test_health.py
-├── config.py
-├── main.py
 └── README.md
 ```
 

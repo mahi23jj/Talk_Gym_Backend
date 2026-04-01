@@ -1,0 +1,105 @@
+from fastapi import Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer
+from passlib.context import CryptContext
+from datetime import datetime, timedelta, timezone
+from jose import JWTError, jwt
+from app.db.postgran import SessionType
+from sqlmodel import select
+
+from app.core.config import settings
+from app.schemas.auth import UserSignInschema, UserLoginSchema
+from app.models.auth import User
+
+bycrypt_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+oauth_bearer = OAuth2PasswordBearer(tokenUrl="auth/token")
+
+
+def create_access_token(data: dict, expires_delta: int | None = None) -> str:
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.now(timezone.utc) + timedelta(minutes=expires_delta)
+    else:
+        expire = datetime.now(timezone.utc) + timedelta(minutes=15)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(
+        to_encode, settings.secret_key, algorithm=settings.algorithm
+    )
+    return encoded_jwt
+
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return bycrypt_context.verify(plain_password, hashed_password)
+
+
+def get_password_hash(password: str) -> str:
+    return bycrypt_context.hash(password)
+
+
+def get_current_user(token: str = Depends(oauth_bearer)) -> dict:
+    try:
+        payload = jwt.decode(
+            token, settings.secret_key, algorithms=[settings.algorithm]
+        )
+        username: str = payload.get("sub")
+        email: str = payload.get("email")
+
+        if username is None or email is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
+            )
+        return {"username": username, "email": email}
+    except JWTError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
+        ) from exc
+
+
+async def sign_in_user(user: "UserSignInschema", db: SessionType) -> str:
+    existing_user = db.exec(
+        select(User).where((User.email == user.email) | (User.username == user.username))
+    ).first()
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="User already exists"
+        )
+
+    # Hash the password
+    hashed_password = get_password_hash(user.password)
+
+    # Create a new user instance
+    new_user = User(
+        username=user.username, email=user.email, password_hash=hashed_password
+    )
+
+    access_token_expires = settings.access_token_expire_minutes
+    access_token = create_access_token(
+        data={"sub": new_user.username, "email": new_user.email},
+        expires_delta=access_token_expires,
+    )
+
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+
+    return access_token
+
+
+async def login_user(users: "UserLoginSchema", db: SessionType) -> str:
+    user = db.exec(
+        select(User).where((User.email == users.email) | (User.username == users.username))
+    ).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password"
+        )
+    if not verify_password(users.password, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password"
+        )
+
+    access_token_expires = settings.access_token_expire_minutes
+    access_token = create_access_token(
+        data={"sub": user.username, "email": user.email},
+        expires_delta=access_token_expires,
+    )
+    return access_token

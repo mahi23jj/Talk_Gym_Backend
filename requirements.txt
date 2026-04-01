@@ -4,3 +4,7 @@ python-dotenv
 sqlmodel
 pytest
 httpx
+passlib[bcrypt]
+python-jose[cryptography]
+bcrypt<5
+email-validator

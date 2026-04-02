@@ -19,6 +19,12 @@ def init_db() -> None:
     """Initialize the database."""
     # Ensure model metadata is registered before creating tables.
     from app.models.auth import User  # noqa: F401
+    from app.models.interview import (  # noqa: F401
+        Attempt,
+        InterviewAnalysis,
+        TrainingFollowUp,
+        UserProgress,
+    )
     from app.models.speaking import (  # noqa: F401
         AIAnalysis,
         ChatMessage,
@@ -28,8 +34,12 @@ def init_db() -> None:
     )
     from app.models.request_log import RequestLog  # noqa: F401
     from app.models.usage import AIUsage  # noqa: F401
+    from app.services.training_service import seed_training_followups
 
     SQLModel.metadata.create_all(engine)
+
+    with Session(engine) as session:
+        seed_training_followups(session)
 
 
 SessionType = Annotated[Session, Depends(get_session)]

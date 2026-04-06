@@ -1,10 +1,9 @@
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from passlib.context import CryptContext
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from jose import JWTError, jwt
-from app.db.postgran import SessionType
-from sqlmodel import select
+from sqlmodel import Session
 
 from app.core.config import settings
 from app.schemas.auth import UserSignInschema, UserLoginSchema
@@ -17,9 +16,9 @@ oauth_bearer = OAuth2PasswordBearer(tokenUrl="auth/token")
 def create_access_token(data: dict, expires_delta: int | None = None) -> str:
     to_encode = data.copy()
     if expires_delta:
-        expire = datetime.now(timezone.utc) + timedelta(minutes=expires_delta)
+        expire = datetime.utcnow() + timedelta(minutes=expires_delta)
     else:
-        expire = datetime.now(timezone.utc) + timedelta(minutes=15)
+        expire = datetime.utcnow() + timedelta(minutes=15)
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(
         to_encode, settings.secret_key, algorithm=settings.algorithm
@@ -54,10 +53,12 @@ def get_current_user(token: str = Depends(oauth_bearer)) -> dict:
         ) from exc
 
 
-async def sign_in_user(user: "UserSignInschema", db: SessionType) -> str:
-    existing_user = db.exec(
-        select(User).where((User.email == user.email) | (User.username == user.username))
-    ).first()
+async def sign_in_user(user: "UserSignInschema", db: Session) -> str:
+    existing_user = (
+        db.query(User)
+        .filter((User.email == user.email) | (User.username == user.username))
+        .first()
+    )
     if existing_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="User already exists"
@@ -84,10 +85,12 @@ async def sign_in_user(user: "UserSignInschema", db: SessionType) -> str:
     return access_token
 
 
-async def login_user(users: "UserLoginSchema", db: SessionType) -> str:
-    user = db.exec(
-        select(User).where((User.email == users.email) | (User.username == users.username))
-    ).first()
+async def login_user(users: "UserLoginSchema", db: Session) -> str:
+    user = (
+        db.query(User)
+        .filter((User.email == users.email) | (User.username == users.username))
+        .first()
+    )
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password"

@@ -4,7 +4,22 @@ from typing import Any
 
 from app.models.interview import TrainingMode
 
-SIMULATED_AI_PROMPT = """You are an expert interview coach.
+# from openai import OpenAI
+# import os
+# import json
+from typing import Any
+
+# client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+
+SIMULATED_AI_PROMPT = """You are an expert interview evaluation engine.
+
+You MUST follow these rules:
+- Be strict and consistent in scoring
+- Evaluate like a senior FAANG interviewer
+- Do NOT be lenient or motivational
+- Focus on real performance signals
+- Return ONLY valid JSON (no markdown, no explanation)
 
 Analyze the following interview answer:
 
@@ -16,34 +31,99 @@ Answer:
 
 Return structured JSON with:
 
-- overall_score (0-10)
+overall_score (0-10)
 
-CONTENT:
-- relevance
-- clarity
-- structure_star
-- specificity
+content:
+- relevance (0-10)
+- clarity (0-10)
+- structure_star (0-10)
+- specificity (0-10)
 
-COMMUNICATION:
-- conciseness
-- filler_word_count
+communication:
+- conciseness (0-10)
+- filler_word_count 
 - pace (fast/normal/slow)
-- confidence
+- confidence (0-10)
 
-BEHAVIORAL:
-- ownership
-- initiative
-- impact
+behavioral:
+- ownership (0-10)
+- initiative (0-10)
+- impact (0-10)
 
-FLAGS:
+flags:
 - over_explaining
 - rambling
 - low_quantified_results
 - blaming_language
 
-Also identify PRIMARY weakness category:
+primary_training_mode:
 (delivery_training | structure_training | behavioral_training)
+
+short_feedback:
+Write 2–3 sentences only summarizing the candidate's main performance issue and strongest area.
 """
+
+
+# def mock_ai_analysis(transcript: str, question: str) -> dict[str, Any]:
+#     prompt = SIMULATED_AI_PROMPT.format(question=question, transcript=transcript)
+
+#     response = client.chat.completions.create(
+#         model="gpt-4o-mini",
+#         messages=[
+#             {
+#                 "role": "system",
+#                 "content": (
+#                     "You are a strict interview scoring engine. "
+#                     "Return ONLY valid JSON. No extra text."
+#                 ),
+#             },
+#             {"role": "user", "content": prompt},
+#         ],
+#         response_format={"type": "json_object"},
+#     )
+
+#     result = json.loads(response.choices[0].message.content)
+
+#     def safe(path, default=0):
+#         try:
+#             val = result
+#             for p in path:
+#                 val = val[p]
+#             return val
+#         except:
+#             return default
+
+#     return {
+#         "overall_score": safe(["overall_score"]),
+#         "content": {
+#             "relevance": safe(["content", "relevance"]),
+#             "clarity": safe(["content", "clarity"]),
+#             "structure_star": safe(["content", "structure_star"]),
+#             "specificity": safe(["content", "specificity"]),
+#         },
+#         "communication": {
+#             "conciseness": safe(["communication", "conciseness"]),
+#             "filler_word_count": safe(["communication", "filler_word_count"]),
+#             "pace": safe(["communication", "pace"], "normal"),
+#             "confidence": safe(["communication", "confidence"]),
+#         },
+#         "behavioral": {
+#             "ownership": safe(["behavioral", "ownership"]),
+#             "initiative": safe(["behavioral", "initiative"]),
+#             "impact": safe(["behavioral", "impact"]),
+#         },
+#         "flags": result.get("flags", []),
+#         "primary_training_mode": result.get(
+#             "primary_training_mode", "structure_training"
+#         ),
+#         # 🔥 NEW: human-readable summary
+#         "short_feedback": result.get(
+#             "short_feedback",
+#             "Performance shows mixed structure and clarity; improvement needed in answer organization and specificity.",
+#         ),
+#         "simulated_prompt": SIMULATED_AI_PROMPT,
+#     }
+
 
 FILLER_WORDS = ["um", "uh", "like", "you know", "basically", "actually"]
 
@@ -148,23 +228,29 @@ def mock_ai_analysis(transcript: str, question: str) -> dict[str, Any]:
     }
 
 
-def select_training_mode(analysis: dict[str, Any]) -> str:
+def select_training_mode(analysis: dict[str, Any]) -> list:
     flags = set(analysis.get("flags", []))
     content = analysis.get("content", {})
     communication = analysis.get("communication", {})
     behavioral = analysis.get("behavioral", {})
 
-    if {
-        "over_explaining",
-        "rambling",
-    }.intersection(flags) or communication.get("pace") == "fast" or communication.get("confidence", 10) < 6:
-        return TrainingMode.delivery_training.value
+    modes: list[TrainingMode] = []
+
+    if (
+        {
+            "over_explaining",
+            "rambling",
+        }.intersection(flags)
+        or communication.get("pace") == "fast"
+        or communication.get("confidence", 10) < 6
+    ):
+        modes.append(TrainingMode.delivery_training)
 
     if communication.get("filler_word_count", 0) > 3:
-        return TrainingMode.delivery_training.value
+        modes.append(TrainingMode.delivery_training)
 
     if content.get("structure_star", 10) < 6 or "rambling" in flags:
-        return TrainingMode.structure_training.value
+        modes.append(TrainingMode.structure_training)
 
     if (
         behavioral.get("ownership", 10) < 6
@@ -172,35 +258,15 @@ def select_training_mode(analysis: dict[str, Any]) -> str:
         or behavioral.get("impact", 10) < 6
         or "blaming_language" in flags
     ):
-        return TrainingMode.behavioral_training.value
+        modes.append(TrainingMode.behavioral_training)
 
-    return analysis.get("primary_training_mode", TrainingMode.structure_training.value)
-
-
-def generate_recommendations(analysis: dict[str, Any], training_mode: str) -> list[str]:
-    recommendations_by_mode = {
-        TrainingMode.delivery_training.value: [
-            "60-Second Answer Challenge",
-            "Confidence Repetition Mode",
-            "Remove filler words and retry",
-        ],
-        TrainingMode.structure_training.value: [
-            "STAR Structure Practice",
-            "Break your answer into Situation, Task, Action, Result",
-            "What was the measurable Result?",
-        ],
-        TrainingMode.behavioral_training.value: [
-            "Ownership Rewrite Practice",
-            "Highlight your initiative in one sentence",
-            "Show measurable impact and avoid blame",
-        ],
-    }
-
-    base = recommendations_by_mode.get(training_mode, ["Practice again with a cleaner answer"])
-    score = float(analysis.get("overall_score", 0))
-    if score < 5:
-        return base[:3]
-    return base[:2] + [base[-1]] if len(base) >= 3 else base
+    return (
+        modes
+        if modes
+        else [
+            analysis.get("primary_training_mode", TrainingMode.structure_training.value)
+        ]
+    )
 
 
 def build_training_instructions(training_mode: str) -> list[str]:
@@ -220,4 +286,24 @@ def build_training_instructions(training_mode: str) -> list[str]:
         "Focus on ownership, initiative, and impact.",
         "Remove blame and speak from your own actions.",
         "Emphasize what you specifically contributed.",
+    ]
+
+
+def build_training_followups(training_mode: str) -> list[str]:
+    if training_mode == TrainingMode.delivery_training.value:
+        return [
+            "What specific filler words did you notice in your answer?",
+            "Did you feel rushed or confident in your delivery?",
+            "How did the pacing of your answer feel to you?",
+        ]
+    if training_mode == TrainingMode.structure_training.value:
+        return [
+            "Can you identify the Situation, Task, Action, and Result in your answer?",
+            "Was there any part of your answer that felt unclear or out of order?",
+            "How could you make the Result more measurable or specific?",
+        ]
+    return [
+        "Where did you take ownership in your answer?",
+        "What initiative did you show in the situation you described?",
+        "How did you demonstrate impact in your answer?",
     ]

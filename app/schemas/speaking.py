@@ -4,12 +4,14 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from app.models.speaking import AttemptType, SenderType
+
 
 
 class QuestionCreateSchema(BaseModel):
     title: str = Field(min_length=3, max_length=200)
     description: str = Field(min_length=10)
+    # they relate many to many, so we just send a list of tag names here. The service layer will handle linking them.
+    tags: list[str] = Field(default_factory=list) 
     day_unlock: int = Field(ge=1)
 
 
@@ -20,13 +22,55 @@ class QuestionReadSchema(QuestionCreateSchema):
     model_config = ConfigDict(from_attributes=True)
 
 
+class TagCreateSchema(BaseModel):
+    name: str = Field(min_length=1, max_length=50)
+
+
+class TagReadSchema(BaseModel):
+    id: int
+    name: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class TagStatSchema(BaseModel):
+    tag: TagReadSchema
+    question_count: int = Field(ge=0)
+
+
+class QuestionTagsUpdateSchema(BaseModel):
+    tags: list[str] = Field(default_factory=list)
+
+
+class QuestionByTagsQuerySchema(BaseModel):
+    tags: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def parse_tags(cls, data: object) -> object:
+        if not isinstance(data, dict):
+            return data
+        value = data.get("tags")
+        if isinstance(value, str):
+            data["tags"] = [item.strip() for item in value.split(",") if item.strip()]
+        return data
+
+
+class QuestionSearchQuerySchema(BaseModel):
+    keyword: str = Field(min_length=1)
+
+
+class QuestionWithCountSchema(BaseModel):
+    question: QuestionReadSchema
+    count: int = Field(ge=0)
+
+
 class RecordingCreateSchema(BaseModel):
     user_id: int = Field(gt=0)
     question_id: int = Field(gt=0)
     audio_url: str = Field(min_length=5, max_length=500)
     duration_seconds: int = Field(gt=0)
     size_bytes: int = Field(gt=0)
-    attempt_type: AttemptType = AttemptType.normal
 
 
 class RecordingReadSchema(RecordingCreateSchema):
@@ -57,28 +101,7 @@ class ChatSessionReadSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class ChatMessageCreateSchema(BaseModel):
-    chat_session_id: int = Field(gt=0)
-    sender_type: SenderType
-    message_text: str | None = Field(default=None, min_length=1)
-    audio_url: str | None = Field(default=None, min_length=5, max_length=500)
 
-    @model_validator(mode="after")
-    def require_text_or_audio(self) -> "ChatMessageCreateSchema":
-        if not self.message_text and not self.audio_url:
-            raise ValueError("Either message_text or audio_url must be provided")
-        return self
-
-
-class ChatMessageReadSchema(BaseModel):
-    id: int
-    chat_session_id: int
-    sender_type: SenderType
-    message_text: str | None
-    audio_url: str | None
-    created_at: datetime
-
-    model_config = ConfigDict(from_attributes=True)
 
 
 class AIAnalysisCreateSchema(BaseModel):

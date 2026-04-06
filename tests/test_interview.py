@@ -7,9 +7,9 @@ from sqlmodel import Session, SQLModel, create_engine
 from app.db.postgran import get_session
 from app.main import app
 from app.models.auth import User
-from app.models.speaking import Question, Recording
+from app.models.question import Question, Recording
 from app.services.auth import get_current_user
-from app.services.training_service import seed_training_followups
+from app.services.interview import seed_training_followups
 
 
 def _override_get_current_user() -> dict[str, str]:

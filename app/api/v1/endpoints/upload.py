@@ -1,13 +1,14 @@
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from app.services.ai_service import mock_transcript
 from app.services.uplode_service import upload_audio_to_cloudinary
 from sqlmodel import select
 
 from app.core.config import settings
 from app.db.postgran import get_session
 from app.models.auth import User
-from app.models.speaking import AttemptType, Recording
+from app.models.recording import Recording
 from app.schemas.audio import AudioUploadResponse
 from app.services.auth import get_current_user
 from app.services.rate_limiter import enforce_rate_limit
@@ -20,7 +21,6 @@ router = APIRouter(prefix="/upload", tags=["Upload"])
 async def upload_audio(
     question_id: int = Form(...),
     duration_seconds: int = Form(...),
-    attempt_type: AttemptType = Form(default=AttemptType.normal),
     audio: UploadFile = File(...),
     db=Depends(get_session),
     current_user: dict = Depends(get_current_user),
@@ -60,13 +60,15 @@ async def upload_audio(
 
     audio_url = await upload_audio_to_cloudinary(simulated_audio_url, attempt_type)
 
+    transcript = mock_transcript(audio_url)
+
     recording = Recording(
         user_id=user.id,
         question_id=question_id,
         audio_url=audio_url,
         duration_seconds=duration_seconds,
         size_bytes=size_bytes,
-        attempt_type=attempt_type,
+        transcription=transcript,
     )
     db.add(recording)
     db.commit()

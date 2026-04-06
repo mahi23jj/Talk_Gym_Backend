@@ -1,11 +1,13 @@
+from __future__ import annotations
 
-# user table
-from app.models.interview import Attempt
-from app.models.question import Recording
-from sqlmodel import SQLModel, Field , Relationship
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
-from app.models.usage import AIUsage
+from sqlmodel import Field, Relationship, SQLModel
+
+if TYPE_CHECKING:
+    from app.models.interview import Attempt
+    from app.models.recording import Recording
+    from app.models.usage import AIUsage
 
 class User(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)

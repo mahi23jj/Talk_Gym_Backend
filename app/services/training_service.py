@@ -1,220 +1,172 @@
 from __future__ import annotations
 
-import random
-from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import HTTPException, status
-from sqlalchemy import func
 from sqlmodel import Session, select
 
-from app.models.auth import User
-from app.models.interview import (
-    Attempt,
-    InterviewAnalysis,
-    TrainingFollowUp,
-    TrainingMode,
+from app.models.interview import Attempt, AttemptStatus, TrainingMode
+from app.models.question import Question
+from app.models.training import (
+    TrainingAnalysis,
+    TrainingAttempt,
+    TrainingProgress,
+    TrainingRecommendation,
 )
-from app.models.speaking import Question, Recording
-from app.schemas.interview import FollowUpSchema, TrainingSessionSchema
 from app.services.ai_service import (
+    build_training_followups,
     build_training_instructions,
-    generate_recommendations,
     mock_ai_analysis,
-    mock_transcript,
     select_training_mode,
 )
-from app.services.progress_service import evaluate_progress, upsert_user_progress
-
-DEFAULT_FOLLOWUPS: dict[str, list[tuple[str, int]]] = {
-    TrainingMode.delivery_training.value: [
-        ("Can you answer in 60 seconds?", 1),
-        ("Remove filler words and retry", 1),
-        ("Speak like you are confident you already solved it", 2),
-    ],
-    TrainingMode.structure_training.value: [
-        ("Break your answer into STAR format", 1),
-        ("What was the Situation?", 1),
-        ("What was the measurable Result?", 2),
-    ],
-    TrainingMode.behavioral_training.value: [
-        ("What did YOU specifically do?", 1),
-        ("How did YOU take initiative?", 1),
-        ("What measurable impact did YOU create?", 2),
-    ],
-}
 
 
-def seed_training_followups(db: Session) -> None:
-    existing = db.exec(select(func.count(TrainingFollowUp.id))).one()
-    if int(existing) > 0:
-        return
-
-    for training_mode, items in DEFAULT_FOLLOWUPS.items():
-        for question_text, difficulty_level in items:
-            db.add(
-                TrainingFollowUp(
-                    training_mode=training_mode,
-                    question_text=question_text,
-                    difficulty_level=difficulty_level,
-                )
-            )
-    db.commit()
-
-
-async def get_random_followups(db: Session, training_mode: str, limit: int = 3) -> list[TrainingFollowUp]:
-    rows = db.exec(
-        select(TrainingFollowUp).where(TrainingFollowUp.training_mode == training_mode)
-    ).all()
-    if not rows:
-        seed_training_followups(db)
-        rows = db.exec(
-            select(TrainingFollowUp).where(TrainingFollowUp.training_mode == training_mode)
-        ).all()
-    if len(rows) <= limit:
-        return rows
-    return random.sample(rows, limit)
-
-
-async def submit_attempt(
+async def submit_training_attempt(
     db: Session,
-    user: User,
-    question_id: int,
-    recording_id: int | None,
-    audio_input: str | None,
-) -> dict[str, Any]:
-    question = db.get(Question, question_id)
-    if not question:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Question not found")
-
-    recording = db.get(Recording, recording_id) if recording_id else None
-    if recording_id and not recording:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Recording not found")
-    if recording and recording.user_id != user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Recording does not belong to user")
-
-    transcript = mock_transcript(audio_input or (recording.audio_url if recording else None))
-    analysis = mock_ai_analysis(transcript=transcript, question=f"{question.title} {question.description}")
-    training_mode = select_training_mode(analysis)
-    recommendations = generate_recommendations(analysis, training_mode)
-    followups = await get_random_followups(db, training_mode)
-
-    attempt = Attempt(
-        user_id=user.id,
-        question_id=question.id,
-        recording_id=recording_id,
-        transcript=transcript,
-        training_mode=training_mode,
-        analysis_json=analysis,
-        detected_issues=analysis.get("flags", []),
-        recommendations=recommendations,
-        is_final_attempt=False,
-    )
-    db.add(attempt)
-    db.commit()
-    db.refresh(attempt)
-
-    analysis_row = InterviewAnalysis(
-        attempt_id=attempt.id,
-        raw_analysis_json=analysis,
-        primary_training_mode=training_mode,
-    )
-    db.add(analysis_row)
-    db.commit()
-    db.refresh(analysis_row)
-
-    progress = await upsert_user_progress(db, user.id, training_mode, float(analysis.get("overall_score", 0)), is_final=False)
-
-    return {
-        "attempt": attempt,
-        "analysis": analysis_row,
-        "training_session": TrainingSessionSchema(
-            attempt_id=attempt.id,
-            training_mode=training_mode,
-            instructions=build_training_instructions(training_mode),
-            followups=[FollowUpSchema.model_validate(row) for row in followups],
-            recommendations=recommendations,
-        ),
-        "progress": progress,
-    }
-
-
-async def create_final_attempt(
-    db: Session,
-    user: User,
+    user_id: int,
     attempt_id: int,
-    recording_id: int | None,
-    audio_input: str | None,
+    training_type: TrainingMode,
+    transcript: str,
 ) -> dict[str, Any]:
-    base_attempt = db.get(Attempt, attempt_id)
-    if not base_attempt:
+    attempt = db.get(Attempt, attempt_id)
+    if not attempt:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attempt not found")
-    if base_attempt.user_id != user.id:
+    if attempt.user_id != user_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Attempt does not belong to user")
 
-    question = db.get(Question, base_attempt.question_id)
-    if not question:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Question not found")
+    recommendation_row = db.exec(
+        select(TrainingRecommendation).where(
+            TrainingRecommendation.attempt_id == attempt_id,
+            TrainingRecommendation.training_type == training_type,
+        )
+    ).first()
+    if not recommendation_row:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Training type is not part of the recommendation plan",
+        )
 
-    recording = db.get(Recording, recording_id) if recording_id else None
-    if recording_id and not recording:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Recording not found")
-    if recording and recording.user_id != user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Recording does not belong to user")
-
-    transcript = mock_transcript(audio_input or (recording.audio_url if recording else None))
-    analysis = mock_ai_analysis(transcript=transcript, question=f"{question.title} {question.description}")
-    training_mode = select_training_mode(analysis)
-    recommendations = generate_recommendations(analysis, training_mode)
-
-    final_attempt = Attempt(
-        user_id=user.id,
-        question_id=question.id,
-        recording_id=recording_id or base_attempt.recording_id,
-        parent_attempt_id=base_attempt.id,
+    training_attempt = TrainingAttempt(
+        attempt_id=attempt_id,
+        training_type=training_type,
         transcript=transcript,
-        training_mode=training_mode,
-        analysis_json=analysis,
-        detected_issues=analysis.get("flags", []),
-        recommendations=recommendations,
-        is_final_attempt=True,
     )
-    db.add(final_attempt)
+    db.add(training_attempt)
     db.commit()
-    db.refresh(final_attempt)
+    db.refresh(training_attempt)
 
-    analysis_row = InterviewAnalysis(
-        attempt_id=final_attempt.id,
-        raw_analysis_json=analysis,
-        primary_training_mode=training_mode,
+    question = db.get(Question, attempt.question_id)
+    question_text = f"{question.title}. {question.description}" if question else "Training follow-up response"
+    analysis_payload = mock_ai_analysis(transcript=transcript, question=question_text)
+    selected_modes = {
+        mode if isinstance(mode, TrainingMode) else TrainingMode(str(mode))
+        for mode in select_training_mode(analysis_payload)
+    }
+    score = int(round(float(analysis_payload.get("overall_score", 0.0)) * 10))
+    passed = score >= 70 and training_type not in selected_modes
+    feedback = (
+        "Training objective met. You can move to the next step."
+        if passed
+        else f"Keep practicing {training_type.value.replace('_', ' ')}."
     )
-    db.add(analysis_row)
+
+    analysis = TrainingAnalysis(
+        training_attempt_id=training_attempt.id,
+        training_type=training_type,
+        score=score,
+        passed=passed,
+        feedback=feedback,
+        raw_analysis_json=analysis_payload,
+    )
+    db.add(analysis)
     db.commit()
-    db.refresh(analysis_row)
+    db.refresh(analysis)
 
-    progress_update = await evaluate_progress(base_attempt, final_attempt)
-
-    progress = await upsert_user_progress(db, user.id, training_mode, float(analysis.get("overall_score", 0)), is_final=True)
-    progress_update["progress"] = progress
-
+    recommendation = "next" if analysis.passed else "repeat"
     return {
-        "attempt": final_attempt,
-        "analysis": analysis_row,
-        "progress_update": progress_update,
+        "training_attempt": training_attempt,
+        "analysis": analysis,
+        "recommendation": recommendation,
     }
 
 
-async def build_training_session(db: Session, attempt: Attempt) -> TrainingSessionSchema:
-    followups = await get_random_followups(db, attempt.training_mode)
-    return TrainingSessionSchema(
-        attempt_id=attempt.id,
-        training_mode=attempt.training_mode,
-        instructions=build_training_instructions(attempt.training_mode),
-        followups=[FollowUpSchema.model_validate(row) for row in followups],
-        recommendations=attempt.recommendations,
-    )
+async def get_current_training(db: Session, attempt_id: int, user_id: int) -> dict[str, Any]:
+    attempt = db.get(Attempt, attempt_id)
+    if not attempt:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attempt not found")
+    if attempt.user_id != user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Attempt does not belong to user")
+
+    progress = db.exec(select(TrainingProgress).where(TrainingProgress.attempt_id == attempt_id)).first()
+    if not progress:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Training progress not found")
+
+    current_training = None
+    if not progress.completed:
+        current_training = db.exec(
+            select(TrainingRecommendation).where(
+                TrainingRecommendation.attempt_id == attempt_id,
+                TrainingRecommendation.priority == progress.current_priority,
+            )
+        ).first()
+
+    return {
+        "attempt_id": attempt_id,
+        "current_priority": progress.current_priority,
+        "completed": progress.completed,
+        "current_training": current_training,
+    }
 
 
-async def get_followups_by_mode(db: Session, training_mode: str, limit: int = 3) -> list[FollowUpSchema]:
-    rows = await get_random_followups(db, training_mode, limit)
-    return [FollowUpSchema.model_validate(row) for row in rows]
+async def move_to_next_training(db: Session, attempt_id: int, user_id: int) -> dict[str, Any]:
+    attempt = db.get(Attempt, attempt_id)
+    if not attempt:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attempt not found")
+    if attempt.user_id != user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Attempt does not belong to user")
+
+    progress = db.exec(select(TrainingProgress).where(TrainingProgress.attempt_id == attempt_id)).first()
+    if not progress:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Training progress not found")
+
+    priorities = db.exec(
+        select(TrainingRecommendation.priority).where(TrainingRecommendation.attempt_id == attempt_id)
+    ).all()
+    if not priorities:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No training recommendations found")
+
+    max_priority = max(priorities)
+    if progress.current_priority >= max_priority:
+        progress.completed = True
+        attempt.status = AttemptStatus.completed
+    else:
+        progress.current_priority += 1
+
+    db.add(progress)
+    db.add(attempt)
+    db.commit()
+    db.refresh(progress)
+
+    next_training = None
+    if not progress.completed:
+        next_training = db.exec(
+            select(TrainingRecommendation).where(
+                TrainingRecommendation.attempt_id == attempt_id,
+                TrainingRecommendation.priority == progress.current_priority,
+            )
+        ).first()
+
+    return {
+        "attempt_id": attempt_id,
+        "current_priority": progress.current_priority,
+        "completed": progress.completed,
+        "next_training": next_training,
+    }
+
+
+def get_training_guidance(training_mode: TrainingMode) -> dict[str, Any]:
+    return {
+        "training_mode": training_mode,
+        "instructions": build_training_instructions(training_mode.value),
+        "followups": build_training_followups(training_mode.value),
+    }

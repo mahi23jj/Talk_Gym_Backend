@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from datetime import date
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from sqlmodel import Field, Relationship, SQLModel
 
-from app.models.auth import User
+if TYPE_CHECKING:
+    from app.models.auth import User
 
 
 class AIUsage(SQLModel, table=True):

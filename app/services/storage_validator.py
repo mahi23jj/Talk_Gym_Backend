@@ -6,7 +6,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import func
 from sqlmodel import Session, select
 
-from app.models.speaking import Recording
+from app.models.recording import Recording
 
 
 async def validate_audio_constraints(

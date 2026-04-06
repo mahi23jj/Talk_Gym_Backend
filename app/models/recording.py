@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from enum import Enum
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
-from app.models.auth import User
 from sqlalchemy import DateTime
 from sqlmodel import Field, SQLModel, Relationship
 
-from app.models.interview import Attempt
+if TYPE_CHECKING:
+    from app.models.auth import User
+    from app.models.interview import Attempt
 
 
 class Recording(SQLModel, table=True):
@@ -22,6 +22,10 @@ class Recording(SQLModel, table=True):
     duration_seconds: int
     size_bytes: int
     transcription: Optional[str] = None
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_type=DateTime(timezone=True),
+    )
 
     user: Optional["User"] = Relationship(back_populates="recordings")
     attempt: Optional["Attempt"] = Relationship(back_populates="recording")

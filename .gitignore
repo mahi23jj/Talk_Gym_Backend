@@ -20,6 +20,8 @@ htmlcov/
 .DS_Store
 .vscode/
 
+alembic.ini
+
 # Environment files
 .env
 

@@ -18,7 +18,7 @@ from app.services.training_service import (
     move_to_next_training,
     submit_training_attempt,
 )
-from app.models.interview import TrainingMode
+from app.models.enums import TrainingMode
 
 router = APIRouter(prefix="/training", tags=["Training"])
 

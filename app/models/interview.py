@@ -1,17 +1,16 @@
-from __future__ import annotations
-
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, List, Optional
 
 from sqlalchemy import DateTime, JSON
+from sqlalchemy.orm import Mapped
 from sqlmodel import Field, Relationship, SQLModel
 
-from app.models.enums import AttemptStatus, TrainingMode
+from app.models.enums import AttemptStatus
 
 if TYPE_CHECKING:
     from app.models.auth import User
     from app.models.recording import Recording
-    from app.models.training import TrainingAnalysis, TrainingAttempt, TrainingProgress, TrainingRecommendation
+    from app.models.training import TrainingAttempt, TrainingProgress, TrainingRecommendation
 
 
 class Attempt(SQLModel, table=True):
@@ -29,15 +28,15 @@ class Attempt(SQLModel, table=True):
         sa_type=DateTime(timezone=True),
     )
 
-    user: Optional["User"] = Relationship(back_populates="attempts")
-    recording: Optional["Recording"] = Relationship(back_populates="attempt")
+    user: Mapped[Optional["User"]] = Relationship(back_populates="attempts")
+    recording: Mapped[Optional["Recording"]] = Relationship(back_populates="attempt")
 
-    analysis: Optional["InterviewAnalysis"] = Relationship(back_populates="attempt")
-    recommendations: list["TrainingRecommendation"] = Relationship(
+    analysis: Mapped[Optional["InterviewAnalysis"]] = Relationship(back_populates="attempt")
+    recommendations: Mapped[List["TrainingRecommendation"]] = Relationship(
         back_populates="attempt"
     )
-    progress: Optional["TrainingProgress"] = Relationship(back_populates="attempt")
-    training_attempts: list["TrainingAttempt"] = Relationship(back_populates="attempt")
+    progress: Mapped[Optional["TrainingProgress"]] = Relationship(back_populates="attempt")
+    training_attempts: Mapped[List["TrainingAttempt"]] = Relationship(back_populates="attempt")
 
 
 class InterviewAnalysis(SQLModel, table=True):
@@ -54,4 +53,4 @@ class InterviewAnalysis(SQLModel, table=True):
         sa_type=DateTime(timezone=True),
     )
 
-    attempt: Optional["Attempt"] = Relationship(back_populates="analysis")
+    attempt: Mapped[Optional["Attempt"]] = Relationship(back_populates="analysis")

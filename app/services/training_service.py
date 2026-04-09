@@ -5,7 +5,8 @@ from typing import Any
 from fastapi import HTTPException, status
 from sqlmodel import Session, select
 
-from app.models.interview import Attempt, AttemptStatus, TrainingMode
+from app.models.enums import AttemptStatus, TrainingMode
+from app.models.interview import Attempt
 from app.models.question import Question
 from app.models.training import (
     TrainingAnalysis,

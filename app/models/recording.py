@@ -1,9 +1,8 @@
-from __future__ import annotations
-
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import DateTime
+from sqlalchemy.orm import Mapped
 from sqlmodel import Field, SQLModel, Relationship
 
 if TYPE_CHECKING:
@@ -27,5 +26,5 @@ class Recording(SQLModel, table=True):
         sa_type=DateTime(timezone=True),
     )
 
-    user: Optional["User"] = Relationship(back_populates="recordings")
-    attempt: Optional["Attempt"] = Relationship(back_populates="recording")
+    user: Mapped[Optional["User"]] = Relationship(back_populates="recordings")
+    attempt: Mapped[Optional["Attempt"]] = Relationship(back_populates="recording")

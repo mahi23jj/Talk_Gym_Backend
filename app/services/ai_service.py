@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.models.interview import TrainingMode
+from app.models.enums import TrainingMode
 
 # from openai import OpenAI
 # import os

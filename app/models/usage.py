@@ -1,8 +1,7 @@
-from __future__ import annotations
-
 from datetime import date
 from typing import TYPE_CHECKING, Optional
 
+from sqlalchemy.orm import Mapped
 from sqlmodel import Field, Relationship, SQLModel
 
 if TYPE_CHECKING:
@@ -19,4 +18,4 @@ class AIUsage(SQLModel, table=True):
     voice_requests_count: int = Field(default=0, ge=0)
     tokens_used: int = Field(default=0, ge=0)
 
-    user: Optional["User"] = Relationship(back_populates="recordings")
+    user: Mapped[Optional["User"]] = Relationship(back_populates="ai_usage")

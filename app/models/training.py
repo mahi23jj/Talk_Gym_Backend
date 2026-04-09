@@ -1,9 +1,8 @@
-from __future__ import annotations
-
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Optional
 
 from sqlalchemy import DateTime, JSON
+from sqlalchemy.orm import Mapped
 from sqlmodel import Field, Relationship, SQLModel
 
 from app.models.enums import TrainingMode
@@ -26,7 +25,7 @@ class TrainingRecommendation(SQLModel, table=True):
         sa_type=DateTime(timezone=True),
     )
 
-    attempt: Optional["Attempt"] = Relationship(back_populates="recommendations")
+    attempt: Mapped[Optional["Attempt"]] = Relationship(back_populates="recommendations")
 
 
 
@@ -44,7 +43,7 @@ class TrainingProgress(SQLModel, table=True):
         sa_type=DateTime(timezone=True),
     )
 
-    attempt: Optional["Attempt"] = Relationship(back_populates="progress")
+    attempt: Mapped[Optional["Attempt"]] = Relationship(back_populates="progress")
 
 
 class TrainingAttempt(SQLModel, table=True):
@@ -60,8 +59,8 @@ class TrainingAttempt(SQLModel, table=True):
         sa_type=DateTime(timezone=True),
     )
 
-    attempt: Optional["Attempt"] = Relationship(back_populates="training_attempts")
-    analysis: Optional["TrainingAnalysis"] = Relationship(back_populates="training_attempt")
+    attempt: Mapped[Optional["Attempt"]] = Relationship(back_populates="training_attempts")
+    analysis: Mapped[Optional["TrainingAnalysis"]] = Relationship(back_populates="training_attempt")
 
 
 
@@ -82,5 +81,5 @@ class TrainingAnalysis(SQLModel, table=True):
         sa_type=DateTime(timezone=True),
     )
 
-    training_attempt: Optional["TrainingAttempt"] = Relationship(back_populates="analysis")
+    training_attempt: Mapped[Optional["TrainingAttempt"]] = Relationship(back_populates="analysis")
 

@@ -1,4 +1,14 @@
-from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator , EmailStr
+from typing import Optional
+
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationInfo,
+    field_validator,
+    model_validator,
+    EmailStr,
+)
 
 
 class UserSignInschema(BaseModel):
@@ -34,14 +44,19 @@ class UserSignInResponseSchema(BaseModel):
 
 
 class UserLoginSchema(BaseModel):
-    username: str | None = Field(default=None, description="Username of the user")
-    email: str | None = Field(default=None, pattern=r"^[\w\.-]+@[\w\.-]+\.\w+$", description="A valid email address")
+    username: Optional[str] = Field(default=None, description="Username of the user")
+    email: Optional[EmailStr] = Field(
+        None, pattern=r"^[\w\.-]+@[\w\.-]+\.\w+$", description="A valid email address"
+    )
     password: str = Field(
         ..., min_length=8, description="Password must be at least 8 characters long"
     )
+
+
 
     @model_validator(mode="after")
     def email_or_username(self) -> "UserLoginSchema":
         if not self.email and not self.username:
             raise ValueError("Either email or username must be provided")
         return self
+

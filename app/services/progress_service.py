@@ -4,7 +4,8 @@ from datetime import datetime, timezone
 
 from sqlmodel import Session, select
 
-from app.models.interview import Attempt, TrainingMode, UserProgress
+from app.models.enums import TrainingMode
+from app.models.interview import Attempt
 
 
 async def upsert_user_progress(

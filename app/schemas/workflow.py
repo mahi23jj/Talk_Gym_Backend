@@ -3,17 +3,17 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
+from fastapi import File, Form, UploadFile
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.models.interview import AttemptStatus, TrainingMode
+from app.models.enums import AttemptStatus, TrainingMode
 
 
 class AttemptSubmitRequest(BaseModel):
-    question_id: int = Field(gt=0)
-    audio_url: str = Field(min_length=1, max_length=500)
-    duration_seconds: int = Field(gt=0)
-    size_bytes: int = Field(gt=0)
-    audio_input: str | None = Field(default=None, min_length=1)
+    audio: UploadFile = (File(...),)
+    duration_seconds: int = Form(
+        ..., gt=0, description="Duration of the audio in seconds"
+    )
 
 
 class AttemptRead(BaseModel):

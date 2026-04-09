@@ -1,8 +1,6 @@
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
-from app.services.ai_service import mock_transcript
-from app.services.uplode_service import upload_audio_to_cloudinary
 from sqlmodel import select
 
 from app.core.config import settings
@@ -11,8 +9,10 @@ from app.models.auth import User
 from app.models.recording import Recording
 from app.schemas.audio import AudioUploadResponse
 from app.services.auth import get_current_user
+from app.services.ai_service import mock_transcript
 from app.services.rate_limiter import enforce_rate_limit
 from app.services.storage_validator import validate_audio_constraints
+from app.services.uplode_service import upload_audio_to_cloudinary
 
 router = APIRouter(prefix="/upload", tags=["Upload"])
 
@@ -20,7 +20,7 @@ router = APIRouter(prefix="/upload", tags=["Upload"])
 @router.post("/audio", response_model=AudioUploadResponse)
 async def upload_audio(
     question_id: int = Form(...),
-    duration_seconds: int = Form(...),
+    duration_seconds: int = Form(..., alias="duration_sec"),
     audio: UploadFile = File(...),
     db=Depends(get_session),
     current_user: dict = Depends(get_current_user),
@@ -56,9 +56,15 @@ async def upload_audio(
         daily_upload_limit=settings.daily_audio_upload_limit,
     )
 
-    simulated_audio_url = f"storage://uploads/{user.id}/{int(datetime.now(timezone.utc).timestamp())}_{audio.filename}"
-
-    audio_url = await upload_audio_to_cloudinary(simulated_audio_url, attempt_type)
+    try:
+        audio_url = upload_audio_to_cloudinary(content, audio.filename or "audio.m4a")
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Audio upload failed",
+        ) from exc
 
     transcript = mock_transcript(audio_url)
 

@@ -20,13 +20,12 @@ async def submit_normal_attempt(
     audio_url: str,
     duration_seconds: int,
     size_bytes: int,
-    audio_input: str | None,
 ) -> dict[str, Any]:
     question = db.get(Question, question_id)
     if not question:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Question not found")
 
-    transcript = mock_transcript(audio_input or audio_url)
+    transcript = mock_transcript(audio_url)
 
     recording = Recording(
         user_id=user_id,

@@ -5,7 +5,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.models.interview import TrainingMode
+from app.models.enums import TrainingMode
 
 
 class AttemptSubmitSchema(BaseModel):

@@ -1,16 +1,18 @@
 from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from passlib.context import CryptContext
 from datetime import datetime, timedelta
 from jose import JWTError, jwt
 from sqlmodel import Session
 
+from app import db
 from app.core.config import settings
 from app.schemas.auth import UserSignInschema, UserLoginSchema
+
 from app.models.auth import User
 
 bycrypt_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-oauth_bearer = OAuth2PasswordBearer(tokenUrl="auth/token")
+oauth_bearer = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token")
 
 
 def create_access_token(data: dict, expires_delta: int | None = None) -> str:
@@ -106,3 +108,28 @@ async def login_user(users: "UserLoginSchema", db: Session) -> str:
         expires_delta=access_token_expires,
     )
     return access_token
+
+
+async def login_with_access_token(db: Session, form_data: OAuth2PasswordRequestForm = Depends()) -> str:
+    try:
+   
+        username: str = form_data.username
+        password: str = form_data.password
+
+        if username is None or password is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
+            )
+        token = await login_user(
+                UserLoginSchema(
+                    username=form_data.username,
+                    password=form_data.password
+                ),
+                db
+            )
+        return {"access_token": token, "token_type": "bearer"}
+    except JWTError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
+        ) from exc
+    

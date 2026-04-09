@@ -15,27 +15,6 @@ def get_session() -> Session: # type: ignore
     with Session(engine) as session:
         yield session
 
-def init_db() -> None:
-    """Initialize the database."""
-    # Ensure model metadata is registered before creating tables.
-    from app.models.auth import User  # noqa: F401
-    from app.models.interview import (  # noqa: F401
-        Attempt,
-        InterviewAnalysis,
-    )
-    from app.models.question import Question  # noqa: F401
-    from app.models.recording import Recording  # noqa: F401
-    from app.models.request_log import RequestLog  # noqa: F401
-    from app.models.training import (  # noqa: F401
-        TrainingAnalysis,
-        TrainingAttempt,
-        TrainingProgress,
-        TrainingRecommendation,
-    )
-    from app.models.usage import AIUsage  # noqa: F401
-
-    SQLModel.metadata.create_all(engine)
-
 
 SessionType = Annotated[Session, Depends(get_session)]
 

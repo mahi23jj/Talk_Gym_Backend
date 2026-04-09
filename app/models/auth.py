@@ -1,7 +1,6 @@
-from __future__ import annotations
+from typing import TYPE_CHECKING, List, Optional
 
-from typing import TYPE_CHECKING, Optional
-
+from sqlalchemy.orm import Mapped
 from sqlmodel import Field, Relationship, SQLModel
 
 if TYPE_CHECKING:
@@ -15,9 +14,9 @@ class User(SQLModel, table=True):
     email: str = Field(index=True, unique=True)
     password_hash: str
 
-    recordings: list["Recording"] = Relationship(back_populates="user")
-    attempts: list["Attempt"] = Relationship(back_populates="user")
-    ai_usage: list["AIUsage"] = Relationship(back_populates="user")
+    recordings: Mapped[List["Recording"]] = Relationship(back_populates="user")
+    attempts: Mapped[List["Attempt"]] = Relationship(back_populates="user")
+    ai_usage: Mapped[List["AIUsage"]] = Relationship(back_populates="user")
 
 
 

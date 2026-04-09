@@ -1,9 +1,8 @@
-from __future__ import annotations
-
 from datetime import datetime, timezone
-from typing import Optional
+from typing import List, Optional
 
 from sqlalchemy import DateTime
+from sqlalchemy.orm import Mapped
 from sqlmodel import Field, SQLModel, Relationship
 
 
@@ -16,7 +15,7 @@ class Tag(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str = Field(unique=True, index=True)
 
-    questions: list["Question"] = Relationship(
+    questions: Mapped[List["Question"]] = Relationship(
         back_populates="tags", link_model=QuestionTagLink
     )
 
@@ -31,6 +30,6 @@ class Question(SQLModel, table=True):
         sa_type=DateTime(timezone=True),
     )
 
-    tags: list["Tag"] = Relationship(
+    tags: Mapped[List["Tag"]] = Relationship(
         back_populates="questions", link_model=QuestionTagLink
     )

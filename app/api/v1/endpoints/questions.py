@@ -48,6 +48,13 @@ def create_question_endpoint(payload: QuestionCreateSchema, db=Depends(get_sessi
     return _to_question_read_schema(question)
 
 
+
+@router.get("/search", response_model=list[QuestionReadSchema])
+def search_questions_endpoint(keyword: str = Query(..., min_length=1), db=Depends(get_session)):
+    query_model = QuestionSearchQuerySchema(keyword=keyword)
+    rows = search_questions_by_keyword(query_model.keyword, db)
+    return [_to_question_read_schema(question) for question in rows]
+
 @router.get("/{question_id}", response_model=QuestionReadSchema)
 def get_question_endpoint(question_id: int, db=Depends(get_session)):
     question = get_question_by_id(question_id, db)
@@ -120,11 +127,7 @@ def get_questions_by_tags_endpoint(
     ]
 
 
-@router.get("/search", response_model=list[QuestionReadSchema])
-def search_questions_endpoint(keyword: str = Query(..., min_length=1), db=Depends(get_session)):
-    query_model = QuestionSearchQuerySchema(keyword=keyword)
-    rows = search_questions_by_keyword(query_model.keyword, db)
-    return [_to_question_read_schema(question) for question in rows]
+
 
 
 @router.get("/{question_id}/recommendations", response_model=list[QuestionWithCountSchema])

@@ -11,7 +11,11 @@ class Settings:
     app_name: str = os.getenv("APP_NAME", "Talk Gym Backend")
     app_version: str = os.getenv("APP_VERSION", "1.0.0")
     api_v1_prefix: str = os.getenv("API_V1_PREFIX", "/api/v1")
-    postgres_url: str | None = os.getenv("DATABASE_URL") or os.getenv("postgres_url")
+    postgres_url: str | None = (
+        os.getenv("DATABASE_URL")
+        or os.getenv("POSTGRES_URL")
+        or os.getenv("postgres_url")
+    )
     secret_key: str = os.getenv("SECRET_KEY")
     algorithm: str = os.getenv("ALGORITHM")
     access_token_expire_minutes: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES"))

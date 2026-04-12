@@ -237,10 +237,7 @@ def select_training_mode(analysis: dict[str, Any]) -> list:
     modes: list[TrainingMode] = []
 
     if (
-        {
-            "over_explaining",
-            "rambling",
-        }.intersection(flags)
+        {"over_explaining", "rambling"}.intersection(flags)
         or communication.get("pace") == "fast"
         or communication.get("confidence", 10) < 6
     ):
@@ -263,9 +260,7 @@ def select_training_mode(analysis: dict[str, Any]) -> list:
     return (
         modes
         if modes
-        else [
-            analysis.get("primary_training_mode", TrainingMode.structure_training.value)
-        ]
+        else [analysis.get("primary_training_mode", TrainingMode.structure_training.value)]
     )
 
 
@@ -307,3 +302,5 @@ def build_training_followups(training_mode: str) -> list[str]:
         "What initiative did you show in the situation you described?",
         "How did you demonstrate impact in your answer?",
     ]
+
+

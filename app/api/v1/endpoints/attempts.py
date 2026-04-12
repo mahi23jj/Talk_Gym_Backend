@@ -6,9 +6,9 @@ from sqlmodel import select
 from app.core.config import settings
 from app.db.postgran import get_session
 from app.models.auth import User
-from app.schemas.workflow import AttemptSubmitResponse
+from app.schemas.workflow import AttemptEnqueueResponse, AttemptResultResponse
 from app.services.auth import get_current_user
-from app.services.interview import submit_normal_attempt
+from app.services.interview import get_attempt_result, submit_normal_attempt
 from app.services.rate_limiter import enforce_rate_limit
 from app.services.storage_validator import validate_audio_constraints
 from app.services.uplode_service import upload_audio_to_cloudinary
@@ -16,7 +16,7 @@ from app.services.uplode_service import upload_audio_to_cloudinary
 router = APIRouter(prefix="/attempt", tags=["Attempt"])
 
 
-@router.post("/submit/{question_id}", response_model=AttemptSubmitResponse)
+@router.post("/submit/{question_id}", response_model=AttemptEnqueueResponse)
 async def submit_attempt(
     question_id: int,
     duration_seconds: int = Form(..., alias="duration_sec"),
@@ -70,3 +70,18 @@ async def submit_attempt(
         size_bytes=size_bytes,
     )
     return result
+
+
+@router.get("/result/{job_id}", response_model=AttemptResultResponse)
+async def get_attempt_by_job_id(
+    job_id: int,
+    current_user: dict = Depends(get_current_user),
+    db=Depends(get_session),
+):
+    user = db.exec(select(User).where(User.email == current_user["email"])).first()
+    if not user:
+        user = db.exec(select(User).where(User.username == current_user["username"])).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    return get_attempt_result(db=db, job_id=job_id)

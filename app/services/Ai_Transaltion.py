@@ -1,9 +1,19 @@
+import os
 import whisper
 import tempfile
 from fastapi import UploadFile
 
+from imageio_ffmpeg import get_ffmpeg_exe
+
+
+ffmpeg_exe = get_ffmpeg_exe()
+os.environ["IMAGEIO_FFMPEG_EXE"] = ffmpeg_exe
+os.environ["FFMPEG_BINARY"] = ffmpeg_exe
+
 # load model ONCE (important for performance)
-model = whisper.load_model("small")  # tiny / base / small / medium
+WHISPER_MODEL = os.getenv("WHISPER_MODEL", "base")
+print(f"Loading Whisper model: {WHISPER_MODEL}")
+model = whisper.load_model(WHISPER_MODEL)
 
 
 async def transcribe_audio(file: UploadFile) -> str:

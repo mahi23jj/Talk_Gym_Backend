@@ -16,6 +16,11 @@ class AttemptSubmitRequest(BaseModel):
     )
 
 
+class AttemptEnqueueResponse(BaseModel):
+    job_id: int
+    message: str
+
+
 class AttemptRead(BaseModel):
     id: int
     user_id: int
@@ -78,6 +83,12 @@ class AttemptSubmitResponse(BaseModel):
     analysis: InterviewAnalysisRead
     recommendations: list[TrainingRecommendationRead]
     progress: TrainingProgressRead
+
+
+class AttemptResultResponse(BaseModel):
+    status: str
+    message: str | None = None
+    analysis: InterviewAnalysisRead | None = None
 
 
 class TrainingSubmitRequest(BaseModel):

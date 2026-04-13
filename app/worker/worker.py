@@ -13,7 +13,7 @@ from app.models import (
 )
 from app.models.job import Job
 from app.models.enums import TrainingMode
-from app.services.Ai_Transaltion import transcribe_audio
+from app.services.Ai_Transaltion import transcribe_audio_path
 from app.services.ai_service import mock_ai_analysis
 from app.services.traning_recomendation import select_training_mode
 
@@ -54,7 +54,7 @@ while True:
             duration_seconds = int(payload["duration_seconds"])
             size_bytes = int(payload["size_bytes"])
 
-            transcript = transcribe_audio(audio_url)
+            transcript = transcribe_audio_path(audio_url)
             analysis_payload = mock_ai_analysis(
                 transcript=transcript,
                 question=f"{question_title}. {question_description}",

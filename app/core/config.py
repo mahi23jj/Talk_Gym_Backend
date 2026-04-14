@@ -31,7 +31,8 @@ class Settings:
     daily_audio_upload_limit: int = int(os.getenv("DAILY_AUDIO_UPLOAD_LIMIT", "20"))
     redis_host: str = os.getenv("REDIS_HOST", "redis")
     redis_port: int = int(os.getenv("REDIS_PORT", "6379"))
-    redis_db: int = int(os.getenv("REDIS_DB", "0"))
+    redis_username: str = os.getenv("REDIS_USERNAME")
+    redis_password: str = os.getenv("REDIS_PASSWORD")
 
 
 settings = Settings()

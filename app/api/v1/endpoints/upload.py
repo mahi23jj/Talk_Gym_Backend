@@ -15,7 +15,10 @@
 # from app.services.storage_validator import validate_audio_constraints
 # from app.services.uplode_service import upload_audio_to_cloudinary
 
-# router = APIRouter(prefix="/upload", tags=["Upload"])
+from fastapi import APIRouter
+
+
+router = APIRouter(prefix="/upload", tags=["Upload"])
 
 
 # @router.post("/audio")

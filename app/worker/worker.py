@@ -20,10 +20,13 @@ from app.services.traning_recomendation import select_training_mode
 
 while True:
 
+    print("Worker started...")
+
     job_data = redis_client.blpop(queue_name)
     if not job_data:
         continue
-
+    
+    print(redis_client.llen(queue_name))
     try:
         payload = json.loads(job_data[1].decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
@@ -54,7 +57,11 @@ while True:
             duration_seconds = int(payload["duration_seconds"])
             size_bytes = int(payload["size_bytes"])
 
+            print(f"Processing job {job_id} for user {user_id}, question {question_id}")
+
             transcript = transcribe_audio_path(audio_url)
+
+            print(f"AI analysis for transcript: {transcript}")
             analysis_payload = mock_ai_analysis(
                 transcript=transcript,
                 question=f"{question_title}. {question_description}",

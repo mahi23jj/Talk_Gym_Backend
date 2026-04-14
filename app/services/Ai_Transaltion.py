@@ -33,6 +33,7 @@ def _get_model() -> object:
 
 def _transcribe(source: str) -> str:
     model = _get_model()
+    print(f"Transcribing audio from source: {source}")
     result = model.transcribe(
         source,
         language="en",

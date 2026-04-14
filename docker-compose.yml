@@ -19,6 +19,8 @@ services:
       dockerfile: Dockerfile.worker
     container_name: worker_app
     command: python -m app.worker.worker
+    environment:
+      - WHISPER_MODEL=tiny
     depends_on:
       - redis
     volumes:

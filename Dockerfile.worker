@@ -3,8 +3,10 @@ FROM python:3.11-slim
 WORKDIR /app
 
 COPY requirements-worker.txt .
-RUN pip install --no-cache-dir -r requirements-worker.txt
+
+RUN pip install --no-cache-dir --retries 5 --timeout 180 -r requirements-worker.txt
 
 COPY . .
 
 CMD ["python", "app/worker.py"]
+

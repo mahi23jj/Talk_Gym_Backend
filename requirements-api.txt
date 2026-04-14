@@ -1,5 +1,6 @@
 fastapi
 uvicorn
+python-multipart
 python-dotenv
 sqlmodel
 pytest
@@ -10,5 +11,7 @@ bcrypt<5
 email-validator
 psycopg2-binary
 redis
+cloudinary
+
 
 

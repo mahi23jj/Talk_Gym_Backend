@@ -1,3 +1,9 @@
 openai-whisper
-torch
 openai
+imageio-ffmpeg
+numpy<2
+python-dotenv
+redis
+sqlmodel
+psycopg2-binary
+fastapi

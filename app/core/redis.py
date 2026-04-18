@@ -9,6 +9,8 @@ redis_client = redis.Redis(
     password=Settings.redis_password,
 )
 
-queue_name = "audio_upload_queue"
+TRANSCRIPTION_QUEUE = "transcription_queue"
+ANALYSIS_QUEUE = "analysis_queue"
+
 
 

@@ -10,7 +10,7 @@ from app.models.job import Job
 from app.models.interview import InterviewAnalysis
 from app.models.question import Question
 
-from app.core.redis import redis_client, queue_name
+from app.core.redis import redis_client, TRANSCRIPTION_QUEUE 
 
 
 async def submit_normal_attempt(
@@ -46,7 +46,7 @@ async def submit_normal_attempt(
     }
 
     redis_client.rpush(
-        queue_name,
+        TRANSCRIPTION_QUEUE,
         json.dumps(payload),
     )
     return {
@@ -74,16 +74,21 @@ def get_attempt_result(db: Session, job_id: int) -> dict[str, Any]:
         }
     else:
 
+
+
         attempt_analysis = db.exec(
             select(InterviewAnalysis).where(
                 InterviewAnalysis.attempt_id == job_entry.attempt_id
             )
         ).one_or_none()
 
+
         if not attempt_analysis:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Attempt not found"
             )
+        
+
 
         return {
             "status": "done",

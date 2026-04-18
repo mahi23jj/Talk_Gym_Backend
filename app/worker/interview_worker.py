@@ -1,6 +1,6 @@
 import json
 
-from app.core.redis import redis_client, queue_name
+from app.core.redis import redis_client, TRANSCRIPTION_QUEUE 
 from sqlmodel import Session
 
 from app.db.postgran import engine
@@ -12,7 +12,7 @@ from app.models import (
     TrainingProgress,
 )
 from app.models.job import Job
-from app.models.enums import TrainingMode
+from app.models.enums import AttemptStage, TrainingMode
 from app.services.Ai_Transaltion import transcribe_audio_path
 from app.services.ai_service import mock_ai_analysis
 from app.services.traning_recomendation import select_training_mode
@@ -22,11 +22,11 @@ while True:
 
     print("Worker started...")
 
-    job_data = redis_client.blpop(queue_name)
+    job_data = redis_client.blpop(TRANSCRIPTION_QUEUE )
     if not job_data:
         continue
     
-    print(redis_client.llen(queue_name))
+    print(redis_client.llen(TRANSCRIPTION_QUEUE ))
     try:
         payload = json.loads(job_data[1].decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
@@ -56,6 +56,7 @@ while True:
             audio_url = str(payload["audio_url"])
             duration_seconds = int(payload["duration_seconds"])
             size_bytes = int(payload["size_bytes"])
+            stage = str(payload.get("stage", "initial"))
 
             print(f"Processing job {job_id} for user {user_id}, question {question_id}")
 
@@ -88,11 +89,19 @@ while True:
             db.add(recording)
             db.flush()
 
+            stage_value = payload.get("stage", AttemptStage.INITIAL.value)
+            attempt_stage = (
+                AttemptStage(stage_value)
+                if stage_value in AttemptStage._value2member_map_
+                else AttemptStage.INITIAL
+            )
+
             attempt = Attempt(
                 user_id=user_id,
                 question_id=question_id,
                 recording_id=recording.id,
                 transcript=transcript,
+                stage=attempt_stage,
             )
             db.add(attempt)
             db.flush()

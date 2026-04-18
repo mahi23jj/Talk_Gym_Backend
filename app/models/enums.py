@@ -4,7 +4,6 @@ from enum import Enum
 
 
 class TrainingMode(str, Enum):
-    delivery_training = "delivery_training"
     structure_training = "structure_training"
     behavioral_training = "behavioral_training"
 
@@ -12,3 +11,8 @@ class TrainingMode(str, Enum):
 class AttemptStatus(str, Enum):
     active = "active"
     completed = "completed"
+
+class AttemptStage(str, Enum):
+    INITIAL = "initial"
+    TRAINING = "training"
+    FINAL = "final"

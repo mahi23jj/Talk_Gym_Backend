@@ -5,7 +5,7 @@ from sqlalchemy import DateTime, JSON
 from sqlalchemy.orm import Mapped
 from sqlmodel import Field, Relationship, SQLModel
 
-from app.models.enums import AttemptStatus
+from app.models.enums import AttemptStage, AttemptStatus
 
 if TYPE_CHECKING:
     from app.models.auth import User
@@ -27,6 +27,8 @@ class Attempt(SQLModel, table=True):
         default_factory=lambda: datetime.now(timezone.utc),
         sa_type=DateTime(timezone=True),
     )
+
+    stage: AttemptStage = Field(default=AttemptStage.INITIAL)
 
     user: Mapped[Optional["User"]] = Relationship(back_populates="attempts")
     recording: Mapped[Optional["Recording"]] = Relationship(back_populates="attempt")
@@ -54,3 +56,7 @@ class InterviewAnalysis(SQLModel, table=True):
     )
 
     attempt: Mapped[Optional["Attempt"]] = Relationship(back_populates="analysis")
+
+
+
+

@@ -4,6 +4,7 @@ from sqlmodel import select
 from app.db.postgran import get_session
 from app.models.auth import User
 from app.schemas.workflow import (
+    BehavioralTrainingSubmitResponse,
     CurrentTrainingResponse,
     TrainingGuidanceResponse,
     TrainingNextRequest,
@@ -11,6 +12,7 @@ from app.schemas.workflow import (
     TrainingSubmitRequest,
     TrainingSubmitResponse,
 )
+from app.services.beheviral_training import summit_behevioral_traning
 from app.services.auth import get_current_user
 from app.services.training_service import (
     get_current_training,
@@ -23,7 +25,7 @@ from app.models.enums import TrainingMode
 router = APIRouter(prefix="/training", tags=["Training"])
 
 
-@router.post("/submit", response_model=TrainingSubmitResponse)
+@router.post("/submit", response_model=TrainingSubmitResponse | BehavioralTrainingSubmitResponse)
 async def submit_training(
     payload: TrainingSubmitRequest,
     current_user: dict = Depends(get_current_user),
@@ -34,6 +36,14 @@ async def submit_training(
         user = db.exec(select(User).where(User.username == current_user["username"])).first()
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    if payload.training_type == TrainingMode.behavioral_training:
+        return await summit_behevioral_traning(
+            db=db,
+            user_id=user.id,
+            attempt_id=payload.attempt_id,
+            transcript=payload.transcript,
+        )
 
     return await submit_training_attempt(
         db=db,

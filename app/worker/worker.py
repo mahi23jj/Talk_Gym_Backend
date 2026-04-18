@@ -59,11 +59,12 @@ while True:
 
             print(f"Processing job {job_id} for user {user_id}, question {question_id}")
 
-            transcript = transcribe_audio_path(audio_url)
+            transcript_items = transcribe_audio_path(audio_url)
+            transcript = " ".join(item.get("sentence", "") for item in transcript_items).strip()
 
             print(f"AI analysis for transcript: {transcript}")
             analysis_payload = mock_ai_analysis(
-                transcript=transcript,
+                transcript=transcript_items,
                 question=f"{question_title}. {question_description}",
             )
 

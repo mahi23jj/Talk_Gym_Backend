@@ -19,6 +19,8 @@ class TrainingRecommendation(SQLModel, table=True):
     attempt_id: int = Field(foreign_key="attempts.id", index=True)
 
     training_type: TrainingMode
+
+    
     priority: int
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),

@@ -1,6 +1,7 @@
 import os
+import re
 import tempfile
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import UploadFile
 
@@ -11,7 +12,7 @@ ffmpeg_exe = get_ffmpeg_exe()
 os.environ["IMAGEIO_FFMPEG_EXE"] = ffmpeg_exe
 os.environ["FFMPEG_BINARY"] = ffmpeg_exe
 
-WHISPER_MODEL = os.getenv("WHISPER_MODEL", "base")
+WHISPER_MODEL = os.getenv("WHISPER_MODEL", "tiny")
 _model: Optional[object] = None
 
 
@@ -54,5 +55,34 @@ async def transcribe_audio(file: UploadFile) -> str:
             os.remove(tmp_path)
 
 
-def transcribe_audio_path(path_or_url: str) -> str:
-    return _transcribe(path_or_url)
+def transcribe_audio_path(path_or_url: str) -> List[Dict[str, Any]]:
+    transcription_text = _transcribe(path_or_url)
+    return prepare_text(transcription_text)
+
+
+def split_sentences(text: str) -> List[str]:
+    return [s.strip() for s in re.split(r'[.!?]+', text) if s.strip()]
+
+def prepare_text(transcribe: str) -> List[Dict[str, Any]]:
+    result: List[Dict[str, Any]] = []
+    sentences = split_sentences(transcribe)
+
+    for idx, sentence in enumerate(sentences):
+        clean_sentence = sentence.strip()
+        result.append(
+            {
+                "idx": idx,
+                "sentence": clean_sentence,
+            }
+        )
+
+    return result
+        
+
+
+         
+         
+
+
+
+

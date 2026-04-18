@@ -29,9 +29,8 @@ async def upsert_user_progress(
         progress.average_score = round(((progress.average_score * (progress.total_attempts - 1)) + score) / progress.total_attempts, 2)
     progress.updated_at = datetime.now(timezone.utc)
 
-    if training_mode == TrainingMode.delivery_training.value:
-        progress.delivery_training_count += 1
-    elif training_mode == TrainingMode.structure_training.value:
+ 
+    if training_mode == TrainingMode.structure_training.value:
         progress.structure_training_count += 1
     else:
         progress.behavioral_training_count += 1

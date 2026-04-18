@@ -11,18 +11,7 @@ def select_training_mode(analysis: dict[str, Any]) -> list:
 
     modes: list[TrainingMode] = []
 
-    if (
-        {
-            "over_explaining",
-            "rambling",
-        }.intersection(flags)
-        or communication.get("pace") == "fast"
-        or communication.get("confidence", 10) < 6
-    ):
-        modes.append(TrainingMode.delivery_training)
 
-    if communication.get("filler_word_count", 0) > 3:
-        modes.append(TrainingMode.delivery_training)
 
     if content.get("structure_star", 10) < 6 or "rambling" in flags:
         modes.append(TrainingMode.structure_training)
@@ -45,12 +34,6 @@ def select_training_mode(analysis: dict[str, Any]) -> list:
 
 
 def build_training_instructions(training_mode: str) -> list[str]:
-    if training_mode == TrainingMode.delivery_training.value:
-        return [
-            "Answer in 60 seconds.",
-            "Speak with a steady pace and remove filler words.",
-            "Sound confident and keep the answer concise.",
-        ]
     if training_mode == TrainingMode.structure_training.value:
         return [
             "Use STAR format: Situation, Task, Action, Result.",
@@ -65,12 +48,6 @@ def build_training_instructions(training_mode: str) -> list[str]:
 
 
 def build_training_followups(training_mode: str) -> list[str]:
-    if training_mode == TrainingMode.delivery_training.value:
-        return [
-            "What specific filler words did you notice in your answer?",
-            "Did you feel rushed or confident in your delivery?",
-            "How did the pacing of your answer feel to you?",
-        ]
     if training_mode == TrainingMode.structure_training.value:
         return [
             "Can you identify the Situation, Task, Action, and Result in your answer?",

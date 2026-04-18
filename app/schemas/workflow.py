@@ -91,6 +91,19 @@ class AttemptResultResponse(BaseModel):
     analysis: InterviewAnalysisRead | None = None
 
 
+class FinalAttemptSubmitResponse(BaseModel):
+    job_id: int
+    attempt_id: int
+    message: str
+
+
+class FinalAttemptResultResponse(BaseModel):
+    status: str
+    attempt: Any | None = None
+    analysis: Any | None = None
+    progress_update: dict[str, Any] | None = None
+
+
 class TrainingSubmitRequest(BaseModel):
     attempt_id: int = Field(gt=0)
     training_type: TrainingMode
@@ -110,7 +123,7 @@ class TrainingAttemptRead(BaseModel):
 class TrainingAnalysisRead(BaseModel):
     id: int
     training_attempt_id: int
-    training_type: TrainingMode
+    training_type: TrainingMode | None = None
     score: int
     passed: bool
     feedback: str
@@ -124,6 +137,12 @@ class TrainingSubmitResponse(BaseModel):
     training_attempt: TrainingAttemptRead
     analysis: TrainingAnalysisRead
     recommendation: str
+
+
+class BehavioralTrainingSubmitResponse(BaseModel):
+    job_id: int
+    training_attempt_id: int
+    message: str
 
 
 class CurrentTrainingResponse(BaseModel):

@@ -9,6 +9,9 @@ import os
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
+from typing import Any
+import re
+
 
 SIMULATED_AI_PROMPT = """You are an expert behavioral interview evaluator.
 
@@ -88,6 +91,43 @@ Each sentence_feedback item MUST preserve the exact source sentence index from i
 Do not reorder indexes and do not invent new indexes.
 """
 
+simulated_behavioral_prompt = """You are an expert behavioral interview coach.
+ 
+ STRICT RULES:
+ 
+ 
+ - Focus ONLY on ownership, initiative, and impact feedback
+ - Be direct, critical, and actionable
+
+    Analyze the interview response below.
+    Question:
+    {question}
+    Answer (indexed sentence list source):
+    {transcript}
+    Return JSON with this EXACT structure:
+    {
+
+    "overall_Behevioral_score": float (0-10),
+
+
+  "behavioral": {
+    "ownership": int (0-10),
+    "initiative": int (0-10),
+    "impact": int (0-10)
+  },
+
+    "flags": [
+    "blaming_language"
+  ],
+
+  "short_feedback": "2-3 sentences max. Direct and critical."
+
+   pass: true if ownership >=6, initiative >=6, impact >=6 and no blaming_language flag. Otherwise false.
+}
+ """
+
+
+
 
 
 # def mock_ai_analysis(transcript: str, question: str) -> dict[str, Any]:
@@ -145,8 +185,7 @@ Do not reorder indexes and do not invent new indexes.
 #     }
 
 
-from typing import Any
-import re
+
 
 FILLER_WORDS = ["um", "uh", "like", "you know", "sort of", "kind of"]
 
@@ -364,6 +403,76 @@ def mock_ai_analysis(transcript: Any, question: str) -> dict[str, Any]:
         "primary_training_mode": primary_training_mode,
         "short_feedback": "Answer lacks strong ownership and measurable impact. Structure is partially clear but needs more specific actions and results.",
         "simulated_prompt": SIMULATED_AI_PROMPT,
+    }
+
+
+
+
+def mock_ai_beveviral_analysis(transcript: Any, question: str) -> dict[str, Any]:
+    transcript_sentences = _normalize_transcript_sentences(transcript)
+    transcript_text = " ".join(item["sentence"] for item in transcript_sentences)
+    text = transcript_text.lower()
+
+    has_metrics = bool(re.search(r"\d", text))
+    has_blaming = _contains_any(text, ["they made me", "the team failed", "my manager blocked", "it was their fault"])
+
+    ownership = 6
+    if _contains_any(text, WEAK_PATTERNS):
+        ownership -= 2
+    if _contains_any(text, STRONG_OWNERSHIP_PHRASES):
+        ownership += 2
+    if " we " in f" {text} " and " i " not in f" {text} ":
+        ownership -= 2
+    ownership = max(0, min(10, ownership))
+
+    initiative = 5
+    if _contains_any(text, INITIATIVE_PHRASES):
+        initiative += 2
+    if _contains_any(text, ["i took initiative", "i drove", "i volunteered", "i proactively"]):
+        initiative += 1
+    initiative = max(0, min(10, initiative))
+
+    impact = 5
+    if has_metrics:
+        impact += 3
+    else:
+        impact -= 1
+    if _contains_any(text, IMPACT_KEYWORDS):
+        impact += 1
+    impact = max(0, min(10, impact))
+
+    flags: list[str] = []
+    if has_blaming:
+        flags.append("blaming_language")
+
+    passed = ownership >= 6 and initiative >= 6 and impact >= 6 and "blaming_language" not in flags
+    overall_behavioral_score = round((ownership + initiative + impact) / 3, 1)
+
+    if not passed:
+        short_feedback = (
+            "Behavioral signal is not strong enough yet. Increase ownership language, show clearer initiative, "
+            "and include measurable impact from your actions."
+        )
+    else:
+        short_feedback = (
+            "Behavioral signal is acceptable. Ownership, initiative, and impact are visible and mostly concrete."
+        )
+
+    return {
+        "overall_Behevioral_score": overall_behavioral_score,
+        "overall_score": overall_behavioral_score,
+        "behavioral": {
+            "ownership": ownership,
+            "initiative": initiative,
+            "impact": impact,
+        },
+        "flags": flags,
+        "short_feedback": short_feedback,
+        "pass": passed,
+        "question": question,
+        "transcript": transcript_text,
+        "transcript_sentences": transcript_sentences,
+        "simulated_prompt": simulated_behavioral_prompt,
     }
 
 

@@ -68,7 +68,6 @@ class ProgressSchema(BaseModel):
     user_id: int
     total_attempts: int
     final_attempts: int
-    delivery_training_count: int
     structure_training_count: int
     behavioral_training_count: int
     average_score: float

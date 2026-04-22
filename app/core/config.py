@@ -33,6 +33,7 @@ class Settings:
     redis_port: int = int(os.getenv("REDIS_PORT", "6379"))
     redis_username: str = os.getenv("REDIS_USERNAME")
     redis_password: str = os.getenv("REDIS_PASSWORD")
+    google_client_id: str = os.getenv("GOOGLE_CLIENT_ID")
 
 
 settings = Settings()

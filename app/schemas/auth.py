@@ -43,6 +43,10 @@ class UserSignInResponseSchema(BaseModel):
     )
 
 
+class GoogleAuthSchema(BaseModel):
+    token: str = Field(..., min_length=10, description="Google ID token")
+
+
 class UserLoginSchema(BaseModel):
     username: Optional[str] = Field(default=None, description="Username of the user")
     email: Optional[EmailStr] = Field(

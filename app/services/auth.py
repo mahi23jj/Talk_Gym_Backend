@@ -2,10 +2,10 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from passlib.context import CryptContext
 from datetime import datetime, timedelta
+import re
 from jose import JWTError, jwt
 from sqlmodel import Session, select
 
-from app import db
 from app.core.config import settings
 from app.schemas.auth import UserSignInschema, UserLoginSchema
 
@@ -16,6 +16,8 @@ from google.auth.transport import requests
 
 bycrypt_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth_bearer = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token")
+
+GOOGLE_CLIENT_ID = settings.google_client_id
 
 
 def create_access_token(data: dict, expires_delta: int | None = None) -> str:
@@ -113,9 +115,11 @@ async def login_user(users: "UserLoginSchema", db: Session) -> str:
     return access_token
 
 
-async def login_with_access_token(db: Session, form_data: OAuth2PasswordRequestForm = Depends()) -> str:
+async def login_with_access_token(
+    db: Session, form_data: OAuth2PasswordRequestForm = Depends()
+) -> str:
     try:
-   
+
         username: str = form_data.username
         password: str = form_data.password
 
@@ -124,12 +128,9 @@ async def login_with_access_token(db: Session, form_data: OAuth2PasswordRequestF
                 status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
             )
         token = await login_user(
-                UserLoginSchema(
-                    username=form_data.username,
-                    password=form_data.password
-                ),
-                db
-            )
+            UserLoginSchema(username=form_data.username, password=form_data.password),
+            db,
+        )
         return {"access_token": token, "token_type": "bearer"}
     except JWTError as exc:
         raise HTTPException(
@@ -137,16 +138,14 @@ async def login_with_access_token(db: Session, form_data: OAuth2PasswordRequestF
         ) from exc
 
 
-
-GOOGLE_CLIENT_ID = "your_client_id_here"
-
 def verify_google_token(token: str):
     try:
         idinfo = id_token.verify_oauth2_token(
-            token,
-            requests.Request(),
-            GOOGLE_CLIENT_ID
+            token, requests.Request(), GOOGLE_CLIENT_ID
         )
+
+        if not idinfo.get("email_verified", False):
+            return None
 
         return {
             "email": idinfo["email"],
@@ -154,35 +153,62 @@ def verify_google_token(token: str):
             "sub": idinfo["sub"],  # unique user id
         }
 
-    except Exception as e:
+    except Exception:
         return None
 
+
 async def get_user_by_email(db: Session, email: str):
-    return db.exec(
-        select(User).where(User.email == email)
-    ).first()
+    return db.exec(select(User).where(User.email == email)).first()
 
 
-async def create_google_user(db: Session, token: str,):
+def _normalize_username(value: str) -> str:
+    normalized = re.sub(r"[^a-zA-Z0-9_]", "_", value.strip().lower())
+    normalized = re.sub(r"_+", "_", normalized).strip("_")
+    return normalized or "user"
+
+
+def _build_unique_google_username(db: Session, name: str | None, email: str) -> str:
+    base_value = name or email.split("@")[0]
+    base = _normalize_username(base_value)
+    candidate = base
+    suffix = 1
+    while db.exec(select(User).where(User.username == candidate)).first() is not None:
+        suffix += 1
+        candidate = f"{base}_{suffix}"
+    return candidate
+
+
+async def create_google_user(
+    db: Session,
+    token: str,
+):
 
     user_data = verify_google_token(token)
     if not user_data:
         raise HTTPException(status_code=401, detail="Invalid Google token")
-    
+
     user = await get_user_by_email(db, user_data["email"])
 
     if not user:
+        username = _build_unique_google_username(
+            db, user_data.get("name"), user_data["email"]
+        )
         user = User(
             email=user_data["email"],
-            username=user_data.get("name"),
+            username=username,
             google_id=user_data["sub"],  # VERY IMPORTANT
         )
 
         db.add(user)
         db.commit()
         db.refresh(user)
-
-     
+    elif user.google_id and user.google_id != user_data["sub"]:
+        raise HTTPException(status_code=401, detail="Invalid Google token")
+    elif not user.google_id:
+        user.google_id = user_data["sub"]
+        db.add(user)
+        db.commit()
+        db.refresh(user)
 
     access_token_expires = settings.access_token_expire_minutes
     access_token = create_access_token(

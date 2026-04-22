@@ -110,3 +110,35 @@ def test_login_with_invalid_password_returns_401(client: TestClient) -> None:
 
     assert response.status_code == 401
     assert response.json()["detail"] == "Invalid email or password"
+
+
+def test_google_auth_returns_token(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "app.services.auth.verify_google_token",
+        lambda _token: {
+            "email": "google.user@example.com",
+            "name": "Google User",
+            "sub": "google-sub-123",
+        },
+    )
+
+    response = client.post("/api/v1/auth/google", json={"token": "valid_google_token"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["token_type"] == "bearer"
+    assert isinstance(body["access_token"], str)
+    assert body["access_token"]
+
+
+def test_google_auth_invalid_token_returns_401(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("app.services.auth.verify_google_token", lambda _token: None)
+
+    response = client.post(
+        "/api/v1/auth/google", json={"token": "invalid_google_token"}
+    )
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Invalid Google token"

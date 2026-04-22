@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import OAuth2PasswordRequestForm
 
 
@@ -6,7 +6,13 @@ from app.db.postgran import SessionType
 
 
 from app.schemas.auth import UserLoginSchema, UserSignInResponseSchema, UserSignInschema
-from app.services.auth import login_user, login_with_access_token, sign_in_user
+from app.services.auth import (
+    create_google_user,
+    login_user,
+    login_with_access_token,
+    sign_in_user,
+    
+)
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
@@ -28,4 +34,12 @@ async def login_with_token(
     db: SessionType, form_data: OAuth2PasswordRequestForm = Depends()
 ):
     token = await login_with_access_token(db, form_data)
+    return token
+
+
+@router.post("/auth/google")
+async def google_auth(token: str, db: SessionType):
+
+    token = await create_google_user(db, token)
+
     return token

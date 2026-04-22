@@ -3,13 +3,16 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from passlib.context import CryptContext
 from datetime import datetime, timedelta
 from jose import JWTError, jwt
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from app import db
 from app.core.config import settings
 from app.schemas.auth import UserSignInschema, UserLoginSchema
 
 from app.models.auth import User
+
+from google.oauth2 import id_token
+from google.auth.transport import requests
 
 bycrypt_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth_bearer = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token")
@@ -132,4 +135,59 @@ async def login_with_access_token(db: Session, form_data: OAuth2PasswordRequestF
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
         ) from exc
+
+
+
+GOOGLE_CLIENT_ID = "your_client_id_here"
+
+def verify_google_token(token: str):
+    try:
+        idinfo = id_token.verify_oauth2_token(
+            token,
+            requests.Request(),
+            GOOGLE_CLIENT_ID
+        )
+
+        return {
+            "email": idinfo["email"],
+            "name": idinfo.get("name"),
+            "sub": idinfo["sub"],  # unique user id
+        }
+
+    except Exception as e:
+        return None
+
+async def get_user_by_email(db: Session, email: str):
+    return db.exec(
+        select(User).where(User.email == email)
+    ).first()
+
+
+async def create_google_user(db: Session, token: str,):
+
+    user_data = verify_google_token(token)
+    if not user_data:
+        raise HTTPException(status_code=401, detail="Invalid Google token")
     
+    user = await get_user_by_email(db, user_data["email"])
+
+    if not user:
+        user = User(
+            email=user_data["email"],
+            username=user_data.get("name"),
+            google_id=user_data["sub"],  # VERY IMPORTANT
+        )
+
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+
+     
+
+    access_token_expires = settings.access_token_expire_minutes
+    access_token = create_access_token(
+        data={"sub": user.username, "email": user.email},
+        expires_delta=access_token_expires,
+    )
+
+    return access_token

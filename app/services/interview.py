@@ -10,7 +10,7 @@ from app.models.job import Job
 from app.models.interview import InterviewAnalysis
 from app.models.question import Question
 
-from app.core.redis import redis_client, TRANSCRIPTION_QUEUE 
+from app.core.redis import redis_client, TRANSCRIPTION_QUEUE
 
 
 async def submit_normal_attempt(
@@ -74,26 +74,41 @@ def get_attempt_result(db: Session, job_id: int) -> dict[str, Any]:
         }
     else:
 
-
-
-        attempt_analysis = db.exec(
+        analysis = db.exec(
             select(InterviewAnalysis).where(
                 InterviewAnalysis.attempt_id == job_entry.attempt_id
             )
-        ).one_or_none()
+        ).first()
+
+    if not analysis:
+        return {"status": "processing", "message": "Finalizing analysis..."}
+
+    return {
+        "status": "done",
+        "analysis": analysis,
+    }
 
 
-        if not attempt_analysis:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Attempt not found"
-            )
-        
+def get_analysis_result(db: Session, job_id: int) -> dict[str, Any]:
 
+    job_entry = db.get(Job, job_id)
+    if not job_entry:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Job not found"
+        )
 
-        return {
-            "status": "done",
-            "analysis": attempt_analysis,
-        }
+    analysis = db.exec(
+        select(InterviewAnalysis).where(
+            InterviewAnalysis.attempt_id == job_entry.attempt_id
+        )
+    ).first()
+
+    if not analysis:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Job not found"
+        )
+
+    return analysis
 
 
 # async def translate_voice_attempt(attempt_id: int, db: Session) -> dict[str, Any]:

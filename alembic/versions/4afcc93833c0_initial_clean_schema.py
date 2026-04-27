@@ -1,8 +1,8 @@
-"""initial clean
+"""initial clean schema
 
-Revision ID: 3ab318648745
+Revision ID: 4afcc93833c0
 Revises: 
-Create Date: 2026-04-08 12:13:58.086256
+Create Date: 2026-04-26 15:49:31.232919
 
 """
 from typing import Sequence, Union
@@ -12,10 +12,12 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '3ab318648745'
+revision: str = '4afcc93833c0'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
+
+
 
 
 def upgrade() -> None:
@@ -24,7 +26,7 @@ def upgrade() -> None:
     op.create_table('question',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('title', sa.String(length=200), nullable=False),
-    sa.Column('description',sa.String(), nullable=False),
+    sa.Column('description', sa.String(), nullable=False),
     sa.Column('day_unlock', sa.Integer(), nullable=False),
     sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
     sa.PrimaryKeyConstraint('id')
@@ -33,18 +35,20 @@ def upgrade() -> None:
     op.create_index(op.f('ix_question_title'), 'question', ['title'], unique=False)
     op.create_table('tag',
     sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('name',sa.String(), nullable=False),
+    sa.Column('name', sa.String(), nullable=False),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_tag_name'), 'tag', ['name'], unique=True)
     op.create_table('user',
     sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('username',sa.String(), nullable=False),
-    sa.Column('email',sa.String(), nullable=False),
-    sa.Column('password_hash',sa.String(), nullable=False),
+    sa.Column('username', sa.String(), nullable=False),
+    sa.Column('email', sa.String(), nullable=False),
+    sa.Column('password_hash', sa.String(), nullable=True),
+    sa.Column('google_id', sa.String(), nullable=True),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_user_email'), 'user', ['email'], unique=True)
+    op.create_index(op.f('ix_user_google_id'), 'user', ['google_id'], unique=True)
     op.create_index(op.f('ix_user_username'), 'user', ['username'], unique=True)
     op.create_table('ai_usage',
     sa.Column('id', sa.Integer(), nullable=False),
@@ -69,10 +73,10 @@ def upgrade() -> None:
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('user_id', sa.Integer(), nullable=False),
     sa.Column('question_id', sa.Integer(), nullable=False),
-    sa.Column('audio_url',sa.String(), nullable=False),
+    sa.Column('audio_url', sa.String(), nullable=False),
     sa.Column('duration_seconds', sa.Integer(), nullable=False),
     sa.Column('size_bytes', sa.Integer(), nullable=False),
-    sa.Column('transcription',sa.String(), nullable=True),
+    sa.Column('transcription', sa.String(), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
     sa.ForeignKeyConstraint(['question_id'], ['question.id'], ),
     sa.ForeignKeyConstraint(['user_id'], ['user.id'], ),
@@ -85,9 +89,18 @@ def upgrade() -> None:
     sa.Column('user_id', sa.Integer(), nullable=False),
     sa.Column('question_id', sa.Integer(), nullable=False),
     sa.Column('recording_id', sa.Integer(), nullable=False),
-    sa.Column('transcript',sa.String(), nullable=False),
-    sa.Column('status', sa.Enum('active', 'completed', name='attemptstatus'), nullable=False),
+    sa.Column('transcript', sa.String(), nullable=False),
+    sa.Column(
+        'status',
+        sa.Enum('active', 'completed', name='attemptstatus', create_type=False),
+        nullable=False
+    ),
     sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
+    sa.Column(
+        'stage',
+        sa.Enum('INITIAL', 'TRAINING', 'FINAL', name='attemptstage', create_type=False),
+        nullable=False
+    ),
     sa.ForeignKeyConstraint(['question_id'], ['question.id'], ),
     sa.ForeignKeyConstraint(['recording_id'], ['recordings.id'], ),
     sa.ForeignKeyConstraint(['user_id'], ['user.id'], ),
@@ -100,18 +113,28 @@ def upgrade() -> None:
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('attempt_id', sa.Integer(), nullable=False),
     sa.Column('score', sa.Integer(), nullable=False),
-    sa.Column('feedback',sa.String(), nullable=False),
+    sa.Column('feedback', sa.String(), nullable=False),
     sa.Column('raw_analysis_json', sa.JSON(), nullable=False),
     sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
     sa.ForeignKeyConstraint(['attempt_id'], ['attempts.id'], ),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('attempt_id')
     )
+    op.create_table('jobs',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('attempt_id', sa.Integer(), nullable=True),
+    sa.Column('status', sa.String(), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
+    sa.Column('updated_at', sa.DateTime(timezone=True), nullable=False),
+    sa.ForeignKeyConstraint(['attempt_id'], ['attempts.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_jobs_attempt_id'), 'jobs', ['attempt_id'], unique=False)
     op.create_table('training_attempts',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('attempt_id', sa.Integer(), nullable=False),
     sa.Column('training_type', sa.Enum('structure_training', 'behavioral_training', name='trainingmode'), nullable=False),
-    sa.Column('transcript',sa.String(), nullable=False),
+    sa.Column('transcript', sa.String(), nullable=False),
     sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
     sa.ForeignKeyConstraint(['attempt_id'], ['attempts.id'], ),
     sa.PrimaryKeyConstraint('id')
@@ -142,7 +165,7 @@ def upgrade() -> None:
     sa.Column('training_attempt_id', sa.Integer(), nullable=False),
     sa.Column('score', sa.Integer(), nullable=False),
     sa.Column('passed', sa.Boolean(), nullable=False),
-    sa.Column('feedback',sa.String(), nullable=False),
+    sa.Column('feedback', sa.String(), nullable=False),
     sa.Column('raw_analysis_json', sa.JSON(), nullable=False),
     sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
     sa.ForeignKeyConstraint(['training_attempt_id'], ['training_attempts.id'], ),
@@ -161,6 +184,8 @@ def downgrade() -> None:
     op.drop_table('training_progress')
     op.drop_index(op.f('ix_training_attempts_attempt_id'), table_name='training_attempts')
     op.drop_table('training_attempts')
+    op.drop_index(op.f('ix_jobs_attempt_id'), table_name='jobs')
+    op.drop_table('jobs')
     op.drop_table('analysis')
     op.drop_index(op.f('ix_attempts_user_id'), table_name='attempts')
     op.drop_index(op.f('ix_attempts_question_id'), table_name='attempts')
@@ -173,6 +198,7 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_ai_usage_usage_date'), table_name='ai_usage')
     op.drop_table('ai_usage')
     op.drop_index(op.f('ix_user_username'), table_name='user')
+    op.drop_index(op.f('ix_user_google_id'), table_name='user')
     op.drop_index(op.f('ix_user_email'), table_name='user')
     op.drop_table('user')
     op.drop_index(op.f('ix_tag_name'), table_name='tag')

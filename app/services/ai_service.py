@@ -351,7 +351,7 @@ def mock_ai_analysis(transcript: Any, question: str) -> dict[str, Any]:
     if ownership < 6 or impact < 6:
         primary_training_mode = "behavioral_training"
     else:
-        primary_training_mode = "behavioral_training"
+        primary_training_mode = "structure_training"
 
     # --- BEHAVIORAL QUESTIONS ---
     behavioral_questions = [
@@ -402,7 +402,6 @@ def mock_ai_analysis(transcript: Any, question: str) -> dict[str, Any]:
         "star_example": star_example,
         "primary_training_mode": primary_training_mode,
         "short_feedback": "Answer lacks strong ownership and measurable impact. Structure is partially clear but needs more specific actions and results.",
-        "simulated_prompt": SIMULATED_AI_PROMPT,
     }
 
 

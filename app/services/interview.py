@@ -7,7 +7,7 @@ from fastapi import HTTPException, status
 from sqlmodel import Session, select
 
 from app.models.job import Job
-from app.models.interview import InterviewAnalysis
+from app.models.interview import InterviewAnalysis, InterviewSession
 from app.models.question import Question
 
 from app.core.redis import redis_client, TRANSCRIPTION_QUEUE
@@ -31,13 +31,24 @@ async def submit_normal_attempt(
     job_entry = Job(status="pending")
 
     db.add(job_entry)
-    db.commit()
-    db.refresh(job_entry)
+    db.flush()
+    
 
+    session = InterviewSession(
+      user_id = user_id ,
+        question_id = question_id ,  
+    )
+
+    db.add(session)
+    db.flush()
+    
+    
+    db.commit()
     payload = {
         "job_id": job_entry.id,
         "user_id": user_id,
         "question_id": question.id,
+        "session_id": session.id,
         "question_title": question.title,
         "question_description": question.description,
         "audio_url": audio_url,
@@ -49,6 +60,8 @@ async def submit_normal_attempt(
         TRANSCRIPTION_QUEUE,
         json.dumps(payload),
     )
+
+ 
     return {
         "job_id": job_entry.id,
         "message": "Attempt submitted successfully and is being processed.",

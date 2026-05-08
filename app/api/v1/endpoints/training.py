@@ -12,7 +12,7 @@ from app.schemas.workflow import (
     TrainingSubmitRequest,
     TrainingSubmitResponse,
 )
-from app.services.beheviral_training import summit_behevioral_traning
+from app.services.beheviral_training import get_behvioral_attempt_result, summit_behevioral_traning
 from app.services.auth import get_current_user
 from app.services.training_service import (
     get_current_training,
@@ -25,7 +25,7 @@ from app.models.enums import TrainingMode
 router = APIRouter(prefix="/training", tags=["Training"])
 
 
-@router.post("/submit", response_model=TrainingSubmitResponse | BehavioralTrainingSubmitResponse)
+@router.post("/submit", response_model= BehavioralTrainingSubmitResponse)
 async def submit_training(
     payload: TrainingSubmitRequest,
     current_user: dict = Depends(get_current_user),
@@ -37,22 +37,47 @@ async def submit_training(
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
-    if payload.training_type == TrainingMode.behavioral_training:
-        return await summit_behevioral_traning(
+    # if payload.training_type == TrainingMode.behavioral_training:
+    #     return await summit_behevioral_traning(
+    #         db=db,
+    #         user_id=user.id,
+    #         attempt_id=payload.attempt_id,
+    #         transcript=payload.transcript,
+    #     )
+
+    return await summit_behevioral_traning(
             db=db,
             user_id=user.id,
             attempt_id=payload.attempt_id,
             transcript=payload.transcript,
         )
 
-    return await submit_training_attempt(
-        db=db,
-        user_id=user.id,
-        attempt_id=payload.attempt_id,
-        training_type=payload.training_type,
-        transcript=payload.transcript,
-    )
+@router.get("/{training_attempt_id}/results/{job_id}")
+async def get_training_results(
+    training_attempt_id: int,
+    job_id: int,
+    current_user: dict = Depends(get_current_user),
+    db=Depends(get_session),
+):
+    user = db.exec(select(User).where(User.email == current_user["email"])).first()
+    if not user:
+        user = db.exec(select(User).where(User.username == current_user["username"])).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
+    # if payload.training_type == TrainingMode.behavioral_training:
+    #     return await summit_behevioral_traning(
+    #         db=db,
+    #         user_id=user.id,
+    #         attempt_id=payload.attempt_id,
+    #         transcript=payload.transcript,
+    #     )
+
+    return get_behvioral_attempt_result(
+            db=db,
+            training_attempt_id=training_attempt_id,
+            job_id=job_id
+        )
 
 @router.get("/current/{attempt_id}", response_model=CurrentTrainingResponse)
 async def current_training(

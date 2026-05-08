@@ -10,7 +10,11 @@ from app.models.enums import AttemptStage, AttemptStatus
 if TYPE_CHECKING:
     from app.models.auth import User
     from app.models.recording import Recording
-    from app.models.training import TrainingAttempt, TrainingProgress, TrainingRecommendation
+    from app.models.training import (
+        TrainingAttempt,
+        TrainingProgress,
+        TrainingRecommendation,
+    )
 
 
 class Attempt(SQLModel, table=True):
@@ -18,6 +22,7 @@ class Attempt(SQLModel, table=True):
 
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: int = Field(foreign_key="user.id", index=True)
+    session_id: Optional[int] = Field(default=None, foreign_key="interview_sessions.id", index=True)
     question_id: int = Field(foreign_key="question.id", index=True)
     recording_id: int = Field(foreign_key="recordings.id", unique=True)
 
@@ -33,12 +38,20 @@ class Attempt(SQLModel, table=True):
     user: Mapped[Optional["User"]] = Relationship(back_populates="attempts")
     recording: Mapped[Optional["Recording"]] = Relationship(back_populates="attempt")
 
-    analysis: Mapped[Optional["InterviewAnalysis"]] = Relationship(back_populates="attempt")
+    analysis: Mapped[Optional["InterviewAnalysis"]] = Relationship(
+        back_populates="attempt"
+    )
     recommendations: Mapped[List["TrainingRecommendation"]] = Relationship(
         back_populates="attempt"
     )
-    progress: Mapped[Optional["TrainingProgress"]] = Relationship(back_populates="attempt")
-    training_attempts: Mapped[List["TrainingAttempt"]] = Relationship(back_populates="attempt")
+    progress: Mapped[Optional["TrainingProgress"]] = Relationship(
+        back_populates="attempt"
+    )
+    training_attempts: Mapped[List["TrainingAttempt"]] = Relationship(
+        back_populates="attempt"
+    )
+
+    session: Mapped["InterviewSession"] = Relationship(back_populates="attempts")
 
 
 class InterviewAnalysis(SQLModel, table=True):
@@ -58,5 +71,25 @@ class InterviewAnalysis(SQLModel, table=True):
     attempt: Mapped[Optional["Attempt"]] = Relationship(back_populates="analysis")
 
 
+class InterviewSession(SQLModel, table=True):
+    __tablename__ = "interview_sessions"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+
+    user_id: int = Field(foreign_key="user.id", index=True)
+
+    question_id: int = Field(foreign_key="question.id", index=True)
 
 
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_type=DateTime(timezone=True),
+    )
+
+    completed_at: Optional[datetime] = Field(
+        default=None,
+        sa_type=DateTime(timezone=True),
+    )
+
+    # relationships
+    attempts: Mapped[List["Attempt"]] = Relationship(back_populates="session")

@@ -6,18 +6,17 @@ from sqlmodel import select
 from app.core.config import settings
 from app.db.postgran import get_session
 from app.models.auth import User
-from app.models.interview import Attempt
+from app.models.interview import Attempt, InterviewSession
 from app.schemas.workflow import (
     AttemptEnqueueResponse,
     AttemptResultResponse,
-    FinalAttemptResultResponse,
     FinalAttemptSubmitResponse,
 )
 from app.services.auth import get_current_user
-from app.services.final_interview import get_attempt_result as get_final_attempt_result
+from app.services.final_interview import get_session_result as get_final_attempt_result
 from app.services.final_interview import submit_final_attempt
 from app.services.interview import get_analysis_result, get_attempt_result, submit_normal_attempt
-from app.services.rate_limiter import enforce_rate_limit
+# from app.services.rate_limiter import enforce_rate_limit
 from app.services.storage_validator import validate_audio_constraints
 from app.services.uplode_service import upload_audio_to_cloudinary
 
@@ -38,13 +37,13 @@ async def submit_attempt(
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     
-    await enforce_rate_limit(
-        db=db,
-        user_id=user.id,
-        endpoint="/api/v1/upload/audio",
-        minute_limit=settings.rate_limit_per_minute,
-        hour_limit=settings.rate_limit_per_hour,
-    )
+    # await enforce_rate_limit(
+    #     db=db,
+    #     user_id=user.id,
+    #     endpoint="/api/v1/upload/audio",
+    #     minute_limit=settings.rate_limit_per_minute,
+    #     hour_limit=settings.rate_limit_per_hour,
+    # )
 
     content = await audio.read()
     size_bytes = len(content)
@@ -100,13 +99,13 @@ async def submit_final_attempt_route(
     if attempt.user_id != user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Attempt does not belong to user")
 
-    await enforce_rate_limit(
-        db=db,
-        user_id=user.id,
-        endpoint="/api/v1/upload/audio",
-        minute_limit=settings.rate_limit_per_minute,
-        hour_limit=settings.rate_limit_per_hour,
-    )
+    # await enforce_rate_limit(
+    #     db=db,
+    #     user_id=user.id,
+    #     endpoint="/api/v1/upload/audio",
+    #     minute_limit=settings.rate_limit_per_minute,
+    #     hour_limit=settings.rate_limit_per_hour,
+    # )
 
     content = await audio.read()
     size_bytes = len(content)
@@ -170,10 +169,9 @@ async def get_attempt_analysis(
     return get_analysis_result(db=db, job_id=job_id)
 
 
-@router.get("/result/final/{job_id}/{attempt_id}", response_model=FinalAttemptResultResponse)
+@router.get("/result/final/{session_id}")
 async def get_final_attempt_by_job_id(
-    job_id: int,
-    attempt_id: int,
+    session_id: int,
     current_user: dict = Depends(get_current_user),
     db=Depends(get_session),
 ):
@@ -183,10 +181,13 @@ async def get_final_attempt_by_job_id(
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
-    attempt = db.get(Attempt, attempt_id)
+    attempt = db.get(
+        InterviewSession,
+        session_id,
+    )
     if not attempt:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attempt not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="session not found")
     if attempt.user_id != user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Attempt does not belong to user")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="session does not belong to user")
 
-    return get_final_attempt_result(db=db, job_id=job_id, attempt_id=attempt_id)
+    return get_final_attempt_result(db=db, session_id = session_id)

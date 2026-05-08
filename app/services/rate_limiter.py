@@ -50,6 +50,8 @@
 #     db.commit()
 
 
+from http.client import HTTPException
+
 import redis.asyncio as redis
 from typing import Optional, Dict
 import time

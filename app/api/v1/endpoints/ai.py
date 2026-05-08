@@ -6,7 +6,7 @@ from app.db.postgran import get_session
 from app.models.auth import User
 from app.schemas.usage import AIRequestSchema, AIResponseSchema, UsageSummarySchema
 from app.services.auth import get_current_user
-from app.services.rate_limiter import enforce_rate_limit
+# from app.services.rate_limiter import enforce_rate_limit
 from app.services.usage_tracker import enforce_and_increment_usage
 
 router = APIRouter(prefix="/ai", tags=["AI"])
@@ -24,13 +24,13 @@ async def process_ai_request(
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
-    await enforce_rate_limit(
-        db=db,
-        user_id=user.id,
-        endpoint="/api/v1/ai/process",
-        minute_limit=settings.rate_limit_per_minute,
-        hour_limit=settings.rate_limit_per_hour,
-    )
+    # await enforce_rate_limit(
+    #     db=db,
+    #     user_id=user.id,
+    #     endpoint="/api/v1/ai/process",
+    #     minute_limit=settings.rate_limit_per_minute,
+    #     hour_limit=settings.rate_limit_per_hour,
+    # )
 
     usage = await enforce_and_increment_usage(
         db=db,

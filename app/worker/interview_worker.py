@@ -57,6 +57,7 @@ while True:
             duration_seconds = int(payload["duration_seconds"])
             size_bytes = int(payload["size_bytes"])
             stage = str(payload.get("stage", "initial"))
+            session_id = int(payload["session_id"])
 
             print(f"Processing job {job_id} for user {user_id}, question {question_id}")
 
@@ -102,6 +103,7 @@ while True:
                 recording_id=recording.id,
                 transcript=transcript,
                 stage=attempt_stage,
+                session_id = session_id
             )
             db.add(attempt)
             db.flush()

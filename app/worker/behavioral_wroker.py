@@ -59,12 +59,15 @@ while True:
 
             score = int(round(float(analysis_payload.get("overall_Behevioral_score", analysis_payload.get("overall_score", 0.0))) * 10))
             passed = bool(analysis_payload.get("pass", analysis_payload.get("passed", score >= 60)))
+            flag = str(analysis_payload.get("flag"))
             feedback = str(
                 analysis_payload.get(
                     "short_feedback",
-                    "Behavioral analysis completed for the submitted answer.",
+                    "Behavioral analysis completed for the submitted answer." + (f" Flag: {flag}" if flag else ""),
                 )
             )
+
+            
 
             analysis = TrainingAnalysis(
                 training_attempt_id=training_attempt_id,

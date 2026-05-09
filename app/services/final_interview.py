@@ -12,7 +12,7 @@ from app.models.job import Job
 from app.models.interview import Attempt, InterviewAnalysis, InterviewSession
 from app.models.question import Question
 
-from app.core.redis import redis_client, TRANSCRIPTION_QUEUE 
+from app.core.redis import async_redis_client, TRANSCRIPTION_QUEUE 
 
 
 from datetime import timezone
@@ -450,7 +450,7 @@ async def submit_final_attempt(
         "session_id": attempt.session_id,
     }
 
-    redis_client.rpush(
+    async_redis_client.rpush(
         TRANSCRIPTION_QUEUE,
         json.dumps(payload),
     )
@@ -528,7 +528,7 @@ async def submit_final_attempt(
 
 #     while True:
 
-#         job_data = redis_client.blpop(queue_name, timeout=30)
+#         job_data = async_redis_client.blpop(queue_name, timeout=30)
 #         if not job_data:
 #             raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail="Processing timed out. Please try again later.")
 

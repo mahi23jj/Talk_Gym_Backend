@@ -1,6 +1,6 @@
 import json
 
-from app.core.redis import redis_client, TRANSCRIPTION_QUEUE 
+from app.core.redis import async_redis_client, TRANSCRIPTION_QUEUE 
 from sqlmodel import Session
 
 from app.db.postgran import engine
@@ -13,20 +13,21 @@ from app.models import (
 )
 from app.models.job import Job
 from app.models.enums import AttemptStage, TrainingMode
+from app.models.question import Question
 from app.services.Ai_Transaltion import transcribe_audio_path
 from app.services.ai_service import mock_ai_analysis
-from app.services.traning_recomendation import select_training_mode
+from traning_recomendation import select_training_mode
 
 
 while True:
 
     print("Worker started...")
 
-    job_data = redis_client.blpop(TRANSCRIPTION_QUEUE )
+    job_data = async_redis_client.blpop(TRANSCRIPTION_QUEUE )
     if not job_data:
         continue
     
-    print(redis_client.llen(TRANSCRIPTION_QUEUE ))
+    print(async_redis_client.llen(TRANSCRIPTION_QUEUE ))
     try:
         payload = json.loads(job_data[1].decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
@@ -51,13 +52,15 @@ while True:
         try:
             user_id = int(payload["user_id"])
             question_id = int(payload["question_id"])
-            question_title = str(payload["question_title"])
-            question_description = str(payload["question_description"])
             audio_url = str(payload["audio_url"])
             duration_seconds = int(payload["duration_seconds"])
             size_bytes = int(payload["size_bytes"])
             stage = str(payload.get("stage", "initial"))
             session_id = int(payload["session_id"])
+
+            question = db.get(Question, question_id)
+            if not question:
+                raise ValueError(f"Question not found for id={question_id}")
 
             print(f"Processing job {job_id} for user {user_id}, question {question_id}")
 
@@ -67,7 +70,7 @@ while True:
             print(f"AI analysis for transcript: {transcript}")
             analysis_payload = mock_ai_analysis(
                 transcript=transcript_items,
-                question=f"{question_title}. {question_description}",
+                question=f"{question.title}. {question.description}",
             )
 
             ordered_candidates = select_training_mode(analysis_payload)

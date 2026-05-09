@@ -1,71 +1,102 @@
 from __future__ import annotations
 
 import json
+import logging
+import time
 from typing import Any
 
-from fastapi import HTTPException, status
+from fastapi import BackgroundTasks, File, HTTPException, UploadFile, status
 from sqlmodel import Session, select
+
+logger = logging.getLogger(__name__)
 
 from app.models.job import Job
 from app.models.interview import InterviewAnalysis, InterviewSession
-from app.models.question import Question
 
-from app.core.redis import redis_client, TRANSCRIPTION_QUEUE
+from app.core.redis import async_redis_client, TRANSCRIPTION_QUEUE
+from app.services.uplode_service import upload_audio_to_cloudinary
 
 
 async def submit_normal_attempt(
     db: Session,
     user_id: int,
     question_id: int,
-    audio_url: str,
     duration_seconds: int,
     size_bytes: int,
+    audio_url: str,
 ) -> dict[str, Any]:
-
-    question = db.exec(select(Question).where(Question.id == question_id)).one_or_none()
-    if not question:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Question not found"
+    fn_start = time.perf_counter()
+    try:
+        job_entry = Job(status="pending")
+        session = InterviewSession(
+            user_id=user_id,
+            question_id=question_id,
         )
 
-    job_entry = Job(status="pending")
+        db.add(job_entry)
+        db.add(session)
+        db.flush()
+        
+        db_time_ms = (time.perf_counter() - fn_start) * 1000
+        print(f"[TIMING:submit_normal_attempt] DB create+flush: {db_time_ms:.2f}ms, job_id={job_entry.id}, session_id={session.id}")
 
-    db.add(job_entry)
-    db.flush()
+        payload = {
+            "job_id": job_entry.id,
+            "user_id": user_id,
+            "question_id": question_id,
+            "session_id": session.id,
+            "duration_seconds": duration_seconds,
+            "size_bytes": size_bytes,
+            "audio_url": audio_url,
+        }
+
+        redis_start = time.perf_counter()
+        await async_redis_client.rpush(
+            TRANSCRIPTION_QUEUE,
+            json.dumps(payload),
+        )
+        redis_time_ms = (time.perf_counter() - redis_start) * 1000
+        print(f"[TIMING:submit_normal_attempt] Redis enqueue: {redis_time_ms:.2f}ms")
+        
+        db.commit()
+        commit_time_ms = (time.perf_counter() - fn_start) * 1000
+        print(f"[TIMING:submit_normal_attempt] Commit: {commit_time_ms:.2f}ms")
+        
+        total_fn_ms = (time.perf_counter() - fn_start) * 1000
+        print(f"[TIMING:submit_normal_attempt] TOTAL: {total_fn_ms:.2f}ms")
+
+        return {
+            "job_id": job_entry.id,
+            "message": "Attempt submitted successfully and is being processed.",
+        }
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"An error occurred while submitting the attempt: {exc}",
+            )
+
+
+async def process_audio_summition(content: bytes , payload: dict[str, Any],queue: str , audio: str ) -> dict[str, Any]:
+
+    try:
+        audio_url = upload_audio_to_cloudinary(content, audio)
+
+        payload["audio_url"] = audio_url
+
     
 
-    session = InterviewSession(
-      user_id = user_id ,
-        question_id = question_id ,  
-    )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Audio upload failed",
+        ) from exc
 
-    db.add(session)
-    db.flush()
-    
-    
-    db.commit()
-    payload = {
-        "job_id": job_entry.id,
-        "user_id": user_id,
-        "question_id": question.id,
-        "session_id": session.id,
-        "question_title": question.title,
-        "question_description": question.description,
-        "audio_url": audio_url,
-        "duration_seconds": duration_seconds,
-        "size_bytes": size_bytes,
-    }
-
-    redis_client.rpush(
-        TRANSCRIPTION_QUEUE,
-        json.dumps(payload),
-    )
-
- 
-    return {
-        "job_id": job_entry.id,
-        "message": "Attempt submitted successfully and is being processed.",
-    }
 
 
 def get_attempt_result(db: Session, job_id: int) -> dict[str, Any]:
@@ -128,7 +159,7 @@ def get_analysis_result(db: Session, job_id: int) -> dict[str, Any]:
 
 #     while True:
 
-#         job_data = redis_client.blpop(queue_name, timeout=30)
+#         job_data = async_redis_client.blpop(queue_name, timeout=30)
 #         if not job_data:
 #             raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail="Processing timed out. Please try again later.")
 

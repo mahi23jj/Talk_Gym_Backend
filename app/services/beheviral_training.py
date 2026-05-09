@@ -12,7 +12,7 @@ from app.models.question import Question
 from app.models.training import TrainingAnalysis, TrainingAttempt
 from app.models.enums import TrainingMode
 
-from app.core.redis import redis_client, ANALYSIS_QUEUE
+from app.core.redis import async_redis_client, ANALYSIS_QUEUE
 
 import json
 
@@ -81,7 +81,7 @@ async def summit_behevioral_traning(
         "transcript": transcript,
     }
 
-    redis_client.rpush(
+    async_redis_client.rpush(
         ANALYSIS_QUEUE,
         json.dumps(payload),
     )

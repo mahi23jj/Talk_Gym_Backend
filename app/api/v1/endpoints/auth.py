@@ -17,6 +17,7 @@ from app.services.auth import (
     login_with_access_token,
     sign_in_user,
 )
+# from app.services.rate_limiter import RedisTokenBucketRateLimiter
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
@@ -29,6 +30,9 @@ async def signin(signin_data: UserSignInschema, db: SessionType):
 
 @router.post("/login", response_model=UserSignInResponseSchema)
 async def login(login_data: UserLoginSchema, db: SessionType):
+
+
+
     token = await login_user(login_data, db)
     return {"access_token": token, "token_type": "bearer"}
 

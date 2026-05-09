@@ -9,9 +9,10 @@ from app.models.enums import TrainingMode
 
 
 class AttemptSubmitSchema(BaseModel):
-    question_id: int = Field(gt=0)
-    recording_id: int | None = Field(default=None, gt=0)
-    audio_input: str | None = Field(default=None, min_length=1)
+    audio_url: str = Field(..., min_length=5, max_length=500)
+    size_bytes: int = Field(..., gt=0)
+    duration_seconds: int = Field(..., gt=0)
+    
 
 
 class FinalAttemptSchema(BaseModel):

@@ -1,6 +1,6 @@
 import json
 
-from app.core.redis import redis_client, ANALYSIS_QUEUE
+from app.core.redis import async_redis_client, ANALYSIS_QUEUE
 from sqlmodel import Session
 
 from app.db.postgran import engine
@@ -13,11 +13,11 @@ while True:
 
     print("Worker started...")
 
-    job_data = redis_client.blpop(ANALYSIS_QUEUE)
+    job_data = async_redis_client.blpop(ANALYSIS_QUEUE)
     if not job_data:
         continue
     
-    print(redis_client.llen(ANALYSIS_QUEUE))
+    print(async_redis_client.llen(ANALYSIS_QUEUE))
     try:
         payload = json.loads(job_data[1].decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:

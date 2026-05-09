@@ -28,7 +28,7 @@ class Settings:
         os.getenv("MAX_AUDIO_SIZE_BYTES", str(10 * 1024 * 1024))
     )
     max_audio_duration_seconds: int = int(os.getenv("MAX_AUDIO_DURATION_SECONDS", "90"))
-    daily_audio_upload_limit: int = int(os.getenv("DAILY_AUDIO_UPLOAD_LIMIT", "20"))
+    daily_audio_upload_limit: int = int(os.getenv("DAILY_AUDIO_UPLOAD_LIMIT", "30"))
     redis_host: str = os.getenv("REDIS_HOST", "redis")
     redis_port: int = int(os.getenv("REDIS_PORT", "6379"))
     redis_username: str = os.getenv("REDIS_USERNAME")

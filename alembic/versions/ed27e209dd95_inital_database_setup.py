@@ -1,8 +1,8 @@
-"""initial clean schema
+"""inital database setup
 
-Revision ID: 4afcc93833c0
+Revision ID: ed27e209dd95
 Revises: 
-Create Date: 2026-04-26 15:49:31.232919
+Create Date: 2026-05-09 17:22:25.463976
 
 """
 from typing import Sequence, Union
@@ -12,12 +12,10 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '4afcc93833c0'
+revision: str = 'ed27e209dd95'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
-
-
 
 
 def upgrade() -> None:
@@ -62,6 +60,18 @@ def upgrade() -> None:
     )
     op.create_index(op.f('ix_ai_usage_usage_date'), 'ai_usage', ['usage_date'], unique=False)
     op.create_index(op.f('ix_ai_usage_user_id'), 'ai_usage', ['user_id'], unique=False)
+    op.create_table('interview_sessions',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('user_id', sa.Integer(), nullable=False),
+    sa.Column('question_id', sa.Integer(), nullable=False),
+    sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
+    sa.Column('completed_at', sa.DateTime(timezone=True), nullable=True),
+    sa.ForeignKeyConstraint(['question_id'], ['question.id'], ),
+    sa.ForeignKeyConstraint(['user_id'], ['user.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_interview_sessions_question_id'), 'interview_sessions', ['question_id'], unique=False)
+    op.create_index(op.f('ix_interview_sessions_user_id'), 'interview_sessions', ['user_id'], unique=False)
     op.create_table('questiontaglink',
     sa.Column('question_id', sa.Integer(), nullable=False),
     sa.Column('tag_id', sa.Integer(), nullable=False),
@@ -87,27 +97,22 @@ def upgrade() -> None:
     op.create_table('attempts',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('user_id', sa.Integer(), nullable=False),
+    sa.Column('session_id', sa.Integer(), nullable=True),
     sa.Column('question_id', sa.Integer(), nullable=False),
     sa.Column('recording_id', sa.Integer(), nullable=False),
     sa.Column('transcript', sa.String(), nullable=False),
-    sa.Column(
-        'status',
-        sa.Enum('active', 'completed', name='attemptstatus', create_type=False),
-        nullable=False
-    ),
+    sa.Column('status', sa.Enum('active', 'completed', name='attemptstatus'), nullable=False),
     sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
-    sa.Column(
-        'stage',
-        sa.Enum('INITIAL', 'TRAINING', 'FINAL', name='attemptstage', create_type=False),
-        nullable=False
-    ),
+    sa.Column('stage', sa.Enum('INITIAL', 'TRAINING', 'FINAL', name='attemptstage'), nullable=False),
     sa.ForeignKeyConstraint(['question_id'], ['question.id'], ),
     sa.ForeignKeyConstraint(['recording_id'], ['recordings.id'], ),
+    sa.ForeignKeyConstraint(['session_id'], ['interview_sessions.id'], ),
     sa.ForeignKeyConstraint(['user_id'], ['user.id'], ),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('recording_id')
     )
     op.create_index(op.f('ix_attempts_question_id'), 'attempts', ['question_id'], unique=False)
+    op.create_index(op.f('ix_attempts_session_id'), 'attempts', ['session_id'], unique=False)
     op.create_index(op.f('ix_attempts_user_id'), 'attempts', ['user_id'], unique=False)
     op.create_table('analysis',
     sa.Column('id', sa.Integer(), nullable=False),
@@ -188,12 +193,16 @@ def downgrade() -> None:
     op.drop_table('jobs')
     op.drop_table('analysis')
     op.drop_index(op.f('ix_attempts_user_id'), table_name='attempts')
+    op.drop_index(op.f('ix_attempts_session_id'), table_name='attempts')
     op.drop_index(op.f('ix_attempts_question_id'), table_name='attempts')
     op.drop_table('attempts')
     op.drop_index(op.f('ix_recordings_user_id'), table_name='recordings')
     op.drop_index(op.f('ix_recordings_question_id'), table_name='recordings')
     op.drop_table('recordings')
     op.drop_table('questiontaglink')
+    op.drop_index(op.f('ix_interview_sessions_user_id'), table_name='interview_sessions')
+    op.drop_index(op.f('ix_interview_sessions_question_id'), table_name='interview_sessions')
+    op.drop_table('interview_sessions')
     op.drop_index(op.f('ix_ai_usage_user_id'), table_name='ai_usage')
     op.drop_index(op.f('ix_ai_usage_usage_date'), table_name='ai_usage')
     op.drop_table('ai_usage')

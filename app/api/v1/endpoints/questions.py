@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-
+import time
 from app.db.postgran import get_session
 from app.models.question import Question
 from app.schemas.speaking import (
@@ -43,8 +43,11 @@ def _to_question_read_schema(question: Question) -> QuestionReadSchema:
 
 @router.post("/", response_model=QuestionReadSchema, status_code=status.HTTP_201_CREATED)
 def create_question_endpoint(payload: QuestionCreateSchema, db=Depends(get_session)):
+    stage_start = time.perf_counter()
     question = create_question(payload, db)
     db.refresh(question)
+    rate_limiter_ms = (time.perf_counter() - stage_start) * 1000
+    print(f"[TIMING] create a question: {rate_limiter_ms:.2f}ms")
     return _to_question_read_schema(question)
 
 

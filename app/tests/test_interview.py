@@ -8,11 +8,11 @@ from app.db.postgran import get_session
 from app.main import app
 from app.models.auth import User
 from app.models.question import Question, Recording
-from app.services.auth import get_current_user
+from app.services.auth import get_current_user_id
 from app.services.interview import seed_training_followups
 
 
-def _override_get_current_user() -> dict[str, str]:
+def _override_get_current_user_id() -> dict[str, str]:
     return {"username": "interview_user", "email": "interview@example.com"}
 
 
@@ -57,7 +57,7 @@ def test_interview_flow_end_to_end() -> None:
             yield session
 
     app.dependency_overrides[get_session] = override_session
-    app.dependency_overrides[get_current_user] = _override_get_current_user
+    app.dependency_overrides[get_current_user_id] = _override_get_current_user_id
 
     with TestClient(app) as client:
         submit_response = client.post(

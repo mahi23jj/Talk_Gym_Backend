@@ -1,219 +1,460 @@
-from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from passlib.context import CryptContext
+# from fastapi import Depends, HTTPException, status
+# from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+# from passlib.context import CryptContext
+# from datetime import datetime, timedelta
+# import re
+# from jose import JWTError, jwt
+# from sqlmodel import Session, select
+
+# from app.core.config import settings
+# from app.schemas.auth import UserSignInschema, UserLoginSchema
+
+# from app.models.auth import User
+
+# from google.oauth2 import id_token
+# from google.auth.transport import requests
+
+# bycrypt_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# oauth_bearer = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token")
+
+# GOOGLE_CLIENT_ID = settings.google_client_id
+
+
+# def create_access_token(data: dict, expires_delta: int | None = None) -> str:
+#     to_encode = data.copy()
+#     if expires_delta:
+#         expire = datetime.utcnow() + timedelta(minutes=expires_delta)
+#     else:
+#         expire = datetime.utcnow() + timedelta(minutes=15)
+#     to_encode.update({"exp": expire})
+#     encoded_jwt = jwt.encode(
+#         to_encode, settings.secret_key, algorithm=settings.algorithm
+#     )
+#     return encoded_jwt
+
+
+# def verify_password(plain_password: str, hashed_password: str) -> bool:
+#     return bycrypt_context.verify(plain_password, hashed_password)
+
+
+# def get_password_hash(password: str) -> str:
+#     return bycrypt_context.hash(password)
+
+
+# def get_current_user_id(token: str = Depends(oauth_bearer)) -> dict:
+#     try:
+#         payload = jwt.decode(
+#             token, settings.secret_key, algorithms=[settings.algorithm]
+#         )
+#         username: str = payload.get("sub")
+#         email: str = payload.get("email")
+
+#         if username is None or email is None:
+#             raise HTTPException(
+#                 status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
+#             )
+#         return {"username": username, "email": email}
+#     except JWTError as exc:
+#         raise HTTPException(
+#             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
+#         ) from exc
+
+
+# async def sign_in_user(user: "UserSignInschema", db: Session) -> str:
+#     existing_user = (
+#         db.query(User)
+#         .filter((User.email == user.email) | (User.username == user.username))
+#         .first()
+#     )
+#     if existing_user:
+#         raise HTTPException(
+#             status_code=status.HTTP_400_BAD_REQUEST, detail="User already exists"
+#         )
+
+#     # Hash the password
+#     hashed_password = get_password_hash(user.password)
+
+#     # Create a new user instance
+#     new_user = User(
+#         username=user.username, email=user.email, password_hash=hashed_password
+#     )
+
+#     access_token_expires = settings.access_token_expire_minutes
+#     access_token = create_access_token(
+#         data={"sub": new_user.username, "email": new_user.email},
+#         expires_delta=access_token_expires,
+#     )
+
+#     db.add(new_user)
+#     db.commit()
+#     db.refresh(new_user)
+
+#     return access_token
+
+
+# async def login_user(users: "UserLoginSchema", db: Session) -> str:
+#     user = (
+#         db.query(User)
+#         .filter((User.email == users.email) | (User.username == users.username))
+#         .first()
+#     )
+#     if not user:
+#         raise HTTPException(
+#             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password"
+#         )
+#     if not verify_password(users.password, user.password_hash):
+#         raise HTTPException(
+#             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password"
+#         )
+
+#     access_token_expires = settings.access_token_expire_minutes
+#     access_token = create_access_token(
+#         data={"sub": user.username, "email": user.email},
+#         expires_delta=access_token_expires,
+#     )
+#     return access_token
+
+
+# async def login_with_access_token(
+#     db: Session, form_data: OAuth2PasswordRequestForm = Depends()
+# ) -> str:
+#     try:
+
+#         username: str = form_data.username
+#         password: str = form_data.password
+
+#         if username is None or password is None:
+#             raise HTTPException(
+#                 status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
+#             )
+#         token = await login_user(
+#             UserLoginSchema(username=form_data.username, password=form_data.password),
+#             db,
+#         )
+#         return {"access_token": token, "token_type": "bearer"}
+#     except JWTError as exc:
+#         raise HTTPException(
+#             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
+#         ) from exc
+
+
+# def verify_google_token(token: str):
+#     try:
+#         idinfo = id_token.verify_oauth2_token(
+#             token, requests.Request(), GOOGLE_CLIENT_ID
+#         )
+
+#         if not idinfo.get("email_verified", False):
+#             return None
+
+#         return {
+#             "email": idinfo["email"],
+#             "name": idinfo.get("name"),
+#             "sub": idinfo["sub"],  # unique user id
+#         }
+
+#     except Exception:
+#         return None
+
+
+# async def get_user_by_email(db: Session, email: str):
+#     return db.exec(select(User).where(User.email == email)).first()
+
+
+# def _normalize_username(value: str) -> str:
+#     normalized = re.sub(r"[^a-zA-Z0-9_]", "_", value.strip().lower())
+#     normalized = re.sub(r"_+", "_", normalized).strip("_")
+#     return normalized or "user"
+
+
+# def _build_unique_google_username(db: Session, name: str | None, email: str) -> str:
+#     base_value = name or email.split("@")[0]
+#     base = _normalize_username(base_value)
+#     candidate = base
+#     suffix = 1
+#     while db.exec(select(User).where(User.username == candidate)).first() is not None:
+#         suffix += 1
+#         candidate = f"{base}_{suffix}"
+#     return candidate
+
+
+# async def create_google_user(
+#     db: Session,
+#     token: str,
+# ):
+
+#     user_data = verify_google_token(token)
+#     if not user_data:
+#         raise HTTPException(status_code=401, detail="Invalid Google token")
+
+#     user = await get_user_by_email(db, user_data["email"])
+
+#     if not user:
+#         username = _build_unique_google_username(
+#             db, user_data.get("name"), user_data["email"]
+#         )
+#         user = User(
+#             email=user_data["email"],
+#             username=username,
+#             google_id=user_data["sub"],  # VERY IMPORTANT
+#         )
+
+#         db.add(user)
+#         db.commit()
+#         db.refresh(user)
+#     elif user.google_id and user.google_id != user_data["sub"]:
+#         raise HTTPException(status_code=401, detail="Invalid Google token")
+#     elif not user.google_id:
+#         user.google_id = user_data["sub"]
+#         db.add(user)
+#         db.commit()
+#         db.refresh(user)
+
+#     access_token_expires = settings.access_token_expire_minutes
+#     access_token = create_access_token(
+#         data={"sub": user.username, "email": user.email},
+#         expires_delta=access_token_expires,
+#     )
+
+#     return access_token
 from datetime import datetime, timedelta
 import re
+import time
+
+from fastapi import Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
+from passlib.context import CryptContext
 from sqlmodel import Session, select
-
-from app.core.config import settings
-from app.schemas.auth import UserSignInschema, UserLoginSchema
-
-from app.models.auth import User
 
 from google.oauth2 import id_token
 from google.auth.transport import requests
 
-bycrypt_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+from app.core.config import settings
+from app.db.postgran import get_session
+from app.models.auth import User
+from app.schemas.auth import UserSignInschema, UserLoginSchema
+
+# =========================
+# Security Setup
+# =========================
+
+bcrypt_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
 oauth_bearer = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token")
 
 GOOGLE_CLIENT_ID = settings.google_client_id
 
 
-def create_access_token(data: dict, expires_delta: int | None = None) -> str:
-    to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.utcnow() + timedelta(minutes=expires_delta)
-    else:
-        expire = datetime.utcnow() + timedelta(minutes=15)
-    to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(
-        to_encode, settings.secret_key, algorithm=settings.algorithm
-    )
-    return encoded_jwt
+# =========================
+# Password Utils
+# =========================
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return bycrypt_context.verify(plain_password, hashed_password)
+    return bcrypt_context.verify(plain_password, hashed_password)
 
 
 def get_password_hash(password: str) -> str:
-    return bycrypt_context.hash(password)
+    return bcrypt_context.hash(password)
 
 
-def get_current_user(token: str = Depends(oauth_bearer)) -> dict:
+# =========================
+# JWT
+# =========================
+
+
+def create_access_token(user_id: int, expires_delta: int | None = None) -> str:
+    expire = datetime.utcnow() + timedelta(minutes=expires_delta or 15)
+
+    payload = {"user_id": user_id, "exp": expire}
+
+    return jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
+
+
+def get_current_user_id(token: str = Depends(oauth_bearer)) -> int:
     try:
+
+        stage_start = time.perf_counter()
         payload = jwt.decode(
             token, settings.secret_key, algorithms=[settings.algorithm]
         )
-        username: str = payload.get("sub")
-        email: str = payload.get("email")
 
-        if username is None or email is None:
+        user_id = payload.get("user_id")
+
+        if not user_id:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
             )
-        return {"username": username, "email": email}
-    except JWTError as exc:
+
+        user_lookup_ms = (time.perf_counter() - stage_start) * 1000
+        print(f"[TIMING] JWT decode: {user_lookup_ms:.2f}ms")
+
+        return int(user_id)
+
+    except JWTError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
-        ) from exc
-
-
-async def sign_in_user(user: "UserSignInschema", db: Session) -> str:
-    existing_user = (
-        db.query(User)
-        .filter((User.email == user.email) | (User.username == user.username))
-        .first()
-    )
-    if existing_user:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="User already exists"
         )
 
-    # Hash the password
-    hashed_password = get_password_hash(user.password)
 
-    # Create a new user instance
-    new_user = User(
-        username=user.username, email=user.email, password_hash=hashed_password
-    )
-
-    access_token_expires = settings.access_token_expire_minutes
-    access_token = create_access_token(
-        data={"sub": new_user.username, "email": new_user.email},
-        expires_delta=access_token_expires,
-    )
-
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
-
-    return access_token
-
-
-async def login_user(users: "UserLoginSchema", db: Session) -> str:
-    user = (
-        db.query(User)
-        .filter((User.email == users.email) | (User.username == users.username))
-        .first()
-    )
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password"
-        )
-    if not verify_password(users.password, user.password_hash):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password"
-        )
-
-    access_token_expires = settings.access_token_expire_minutes
-    access_token = create_access_token(
-        data={"sub": user.username, "email": user.email},
-        expires_delta=access_token_expires,
-    )
-    return access_token
-
-
-async def login_with_access_token(
-    db: Session, form_data: OAuth2PasswordRequestForm = Depends()
-) -> str:
-    try:
-
-        username: str = form_data.username
-        password: str = form_data.password
-
-        if username is None or password is None:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
-            )
-        token = await login_user(
-            UserLoginSchema(username=form_data.username, password=form_data.password),
-            db,
-        )
-        return {"access_token": token, "token_type": "bearer"}
-    except JWTError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
-        ) from exc
-
-
-def verify_google_token(token: str):
-    try:
-        idinfo = id_token.verify_oauth2_token(
-            token, requests.Request(), GOOGLE_CLIENT_ID
-        )
-
-        if not idinfo.get("email_verified", False):
-            return None
-
-        return {
-            "email": idinfo["email"],
-            "name": idinfo.get("name"),
-            "sub": idinfo["sub"],  # unique user id
-        }
-
-    except Exception:
-        return None
+# =========================
+# DB Helpers
+# =========================
 
 
 async def get_user_by_email(db: Session, email: str):
     return db.exec(select(User).where(User.email == email)).first()
 
 
-def _normalize_username(value: str) -> str:
+async def get_user_by_username(db: Session, username: str):
+    return db.exec(select(User).where(User.username == username)).first()
+
+
+# =========================
+# Signup
+# =========================
+
+
+async def sign_in_user(user: UserSignInschema, db: Session) -> str:
+
+    existing_user = db.exec(
+        select(User).where(
+            (User.email == user.email) | (User.username == user.username)
+        )
+    ).first()
+
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="User already exists"
+        )
+
+    new_user = User(
+        username=user.username,
+        email=user.email,
+        password_hash=get_password_hash(user.password),
+    )
+
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+
+    return create_access_token(
+        user_id=new_user.id, expires_delta=settings.access_token_expire_minutes
+    )
+
+
+# =========================
+# Login
+# =========================
+
+
+async def login_user(credentials: UserLoginSchema, db: Session) -> str:
+
+    user = db.exec(
+        select(User).where(
+            (User.email == credentials.email) | (User.username == credentials.username)
+        )
+    ).first()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials"
+        )
+
+    if not verify_password(credentials.password, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials"
+        )
+
+    return create_access_token(
+        user_id=user.id, expires_delta=settings.access_token_expire_minutes
+    )
+
+
+async def login_with_access_token(
+    db: Session = Depends(get_session), form_data: OAuth2PasswordRequestForm = Depends()
+):
+
+    token = await login_user(
+        UserLoginSchema(username=form_data.username, password=form_data.password), db
+    )
+
+    return {"access_token": token, "token_type": "bearer"}
+
+
+# =========================
+# Google Auth
+# =========================
+
+
+def verify_google_token(token: str):
+    try:
+        info = id_token.verify_oauth2_token(token, requests.Request(), GOOGLE_CLIENT_ID)
+
+        if not info.get("email_verified", False):
+            return None
+
+        return {"email": info["email"], "name": info.get("name"), "sub": info["sub"]}
+
+    except Exception:
+        return None
+
+
+def _normalize_username(value: str):
     normalized = re.sub(r"[^a-zA-Z0-9_]", "_", value.strip().lower())
+
     normalized = re.sub(r"_+", "_", normalized).strip("_")
+
     return normalized or "user"
 
 
-def _build_unique_google_username(db: Session, name: str | None, email: str) -> str:
-    base_value = name or email.split("@")[0]
-    base = _normalize_username(base_value)
+def _build_unique_google_username(db: Session, name: str | None, email: str):
+    base = _normalize_username(name or email.split("@")[0])
+
     candidate = base
     suffix = 1
-    while db.exec(select(User).where(User.username == candidate)).first() is not None:
+
+    while db.exec(select(User).where(User.username == candidate)).first():
+
         suffix += 1
         candidate = f"{base}_{suffix}"
+
     return candidate
 
 
-async def create_google_user(
-    db: Session,
-    token: str,
-):
+async def create_google_user(db: Session, token: str):
 
     user_data = verify_google_token(token)
+
     if not user_data:
         raise HTTPException(status_code=401, detail="Invalid Google token")
 
     user = await get_user_by_email(db, user_data["email"])
 
     if not user:
+
         username = _build_unique_google_username(
             db, user_data.get("name"), user_data["email"]
         )
+
         user = User(
-            email=user_data["email"],
-            username=username,
-            google_id=user_data["sub"],  # VERY IMPORTANT
+            email=user_data["email"], username=username, google_id=user_data["sub"]
         )
 
         db.add(user)
         db.commit()
         db.refresh(user)
+
     elif user.google_id and user.google_id != user_data["sub"]:
         raise HTTPException(status_code=401, detail="Invalid Google token")
+
     elif not user.google_id:
         user.google_id = user_data["sub"]
         db.add(user)
         db.commit()
         db.refresh(user)
 
-    access_token_expires = settings.access_token_expire_minutes
-    access_token = create_access_token(
-        data={"sub": user.username, "email": user.email},
-        expires_delta=access_token_expires,
+    return create_access_token(
+        user_id=user.id, expires_delta=settings.access_token_expire_minutes
     )
-
-    return access_token

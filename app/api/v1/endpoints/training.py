@@ -13,7 +13,7 @@ from app.schemas.workflow import (
     TrainingSubmitResponse,
 )
 from app.services.beheviral_training import get_behvioral_attempt_result, summit_behevioral_traning
-from app.services.auth import get_current_user
+from app.services.auth import get_current_user_id
 from app.services.training_service import (
     get_current_training,
     get_training_guidance,
@@ -28,12 +28,10 @@ router = APIRouter(prefix="/training", tags=["Training"])
 @router.post("/submit", response_model= BehavioralTrainingSubmitResponse)
 async def submit_training(
     payload: TrainingSubmitRequest,
-    current_user: dict = Depends(get_current_user),
+    user_id: int = Depends(get_current_user_id),
     db=Depends(get_session),
 ):
-    user = db.exec(select(User).where(User.email == current_user["email"])).first()
-    if not user:
-        user = db.exec(select(User).where(User.username == current_user["username"])).first()
+    user = db.get(User, user_id)
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
@@ -56,12 +54,10 @@ async def submit_training(
 async def get_training_results(
     training_attempt_id: int,
     job_id: int,
-    current_user: dict = Depends(get_current_user),
+    user_id: int = Depends(get_current_user_id),
     db=Depends(get_session),
 ):
-    user = db.exec(select(User).where(User.email == current_user["email"])).first()
-    if not user:
-        user = db.exec(select(User).where(User.username == current_user["username"])).first()
+    user = db.get(User, user_id)
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
@@ -82,12 +78,10 @@ async def get_training_results(
 @router.get("/current/{attempt_id}", response_model=CurrentTrainingResponse)
 async def current_training(
     attempt_id: int,
-    current_user: dict = Depends(get_current_user),
+    user_id: int = Depends(get_current_user_id),
     db=Depends(get_session),
 ):
-    user = db.exec(select(User).where(User.email == current_user["email"])).first()
-    if not user:
-        user = db.exec(select(User).where(User.username == current_user["username"])).first()
+    user = db.get(User, user_id)
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
@@ -97,12 +91,10 @@ async def current_training(
 @router.post("/next", response_model=TrainingNextResponse)
 async def next_training(
     payload: TrainingNextRequest,
-    current_user: dict = Depends(get_current_user),
+    user_id: int = Depends(get_current_user_id),
     db=Depends(get_session),
 ):
-    user = db.exec(select(User).where(User.email == current_user["email"])).first()
-    if not user:
-        user = db.exec(select(User).where(User.username == current_user["username"])).first()
+    user = db.get(User, user_id)
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 

@@ -3,20 +3,15 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from concurrent.futures import ThreadPoolExecutor
-from functools import lru_cache
+
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlmodel import or_, select
 
-logger = logging.getLogger(__name__)
 
-# Thread pool for blocking operations
-_executor = ThreadPoolExecutor(max_workers=4)
 
-# Simple TTL cache for user lookups (in-memory)
-_user_cache: dict = {}
-_user_cache_ttl: dict = {}
+
+
 
 from app.core.config import settings
 from app.db.postgran import get_session
@@ -28,7 +23,7 @@ from app.schemas.workflow import (
     AttemptResultResponse,
     FinalAttemptSubmitResponse,
 )
-from app.services.auth import get_current_user
+from app.services.auth import get_current_user_id
 from app.services.final_interview import get_session_result as get_final_attempt_result
 from app.services.final_interview import submit_final_attempt
 from app.services.interview import (
@@ -44,58 +39,83 @@ from fastapi import BackgroundTasks
 router = APIRouter(prefix="/attempt", tags=["Attempt"])
 
 
+# @router.post("/submit/{question_id}", response_model=AttemptEnqueueResponse)
+# async def submit_attempt(
+#     question_id: int,
+#     data: AttemptSubmitSchema,
+#     current_user: dict = Depends(get_current_user_id),
+#     db=Depends(get_session),
+# ):
+#     request_start = time.perf_counter()
+    
+#     # STAGE 1: User lookup (with cache + executor to avoid blocking event loop)
+#     stage_start = time.perf_counter()
+    
+#     # Check cache first
+#     cache_key = f"{current_user['email']}|{current_user['username']}"
+#     now = time.time()
+#     if cache_key in _user_cache and _user_cache_ttl.get(cache_key, 0) > now:
+#         user = _user_cache[cache_key]
+#         print(f"[TIMING] User lookup (cached): {(time.perf_counter() - stage_start) * 1000:.2f}ms")
+#     else:
+#         # Run blocking DB call in thread pool
+#         def _db_lookup():
+#             return db.exec(
+#                 select(User).where(
+#                     or_(
+#                         User.email == current_user["email"],
+#                         User.username == current_user["username"],
+#                     )
+#                 )
+#             ).first()
+        
+#         loop = asyncio.get_event_loop()
+#         user = await loop.run_in_executor(_executor, _db_lookup)
+#         # Cache for 60 seconds
+#         _user_cache[cache_key] = user
+#         _user_cache_ttl[cache_key] = now + 60
+#         user_lookup_ms = (time.perf_counter() - stage_start) * 1000
+#         print(f"[TIMING] User lookup (db): {user_lookup_ms:.2f}ms")
+
+#     if not user:
+#         raise HTTPException(
+#             status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
+#         )
+
+#     # STAGE 2: Rate limiter
+#     stage_start = time.perf_counter()
+#     await FastRateLimiter.enforce(
+#         user_id=user.id,
+#         endpoint="/api/v1/attempt/submit/{question_id}",
+#         limit=5,
+#     )
+#     rate_limiter_ms = (time.perf_counter() - stage_start) * 1000
+#     print(f"[TIMING] Rate limiter: {rate_limiter_ms:.2f}ms")
+
 @router.post("/submit/{question_id}", response_model=AttemptEnqueueResponse)
 async def submit_attempt(
     question_id: int,
     data: AttemptSubmitSchema,
-    current_user: dict = Depends(get_current_user),
+    user_id: int = Depends(get_current_user_id),
     db=Depends(get_session),
-):
+):    
     request_start = time.perf_counter()
+    user_lookup_ms = 0  # Already done by get_current_user_id dependency
     
-    # STAGE 1: User lookup (with cache + executor to avoid blocking event loop)
-    stage_start = time.perf_counter()
-    
-    # Check cache first
-    cache_key = f"{current_user['email']}|{current_user['username']}"
-    now = time.time()
-    if cache_key in _user_cache and _user_cache_ttl.get(cache_key, 0) > now:
-        user = _user_cache[cache_key]
-        print(f"[TIMING] User lookup (cached): {(time.perf_counter() - stage_start) * 1000:.2f}ms")
-    else:
-        # Run blocking DB call in thread pool
-        def _db_lookup():
-            return db.exec(
-                select(User).where(
-                    or_(
-                        User.email == current_user["email"],
-                        User.username == current_user["username"],
-                    )
-                )
-            ).first()
-        
-        loop = asyncio.get_event_loop()
-        user = await loop.run_in_executor(_executor, _db_lookup)
-        # Cache for 60 seconds
-        _user_cache[cache_key] = user
-        _user_cache_ttl[cache_key] = now + 60
-        user_lookup_ms = (time.perf_counter() - stage_start) * 1000
-        print(f"[TIMING] User lookup (db): {user_lookup_ms:.2f}ms")
+    # STAGE 1: User lookup (already done by dependency)
 
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
-        )
-
-    # STAGE 2: Rate limiter
+    # STAGE 2: Rate limiter - Now faster with pipeline
     stage_start = time.perf_counter()
     await FastRateLimiter.enforce(
-        user_id=user.id,
+        user_id=user_id,
         endpoint="/api/v1/attempt/submit/{question_id}",
         limit=5,
+        window_seconds=60,
     )
     rate_limiter_ms = (time.perf_counter() - stage_start) * 1000
     print(f"[TIMING] Rate limiter: {rate_limiter_ms:.2f}ms")
+
+    # Rest of your code remains the same...
 
     # STAGE 3: Size validation
     stage_start = time.perf_counter()
@@ -126,7 +146,7 @@ async def submit_attempt(
     stage_start = time.perf_counter()
     result = await submit_normal_attempt(
         db=db,
-        user_id=user.id,
+        user_id=user_id,
         question_id=question_id,
         duration_seconds=data.duration_seconds,
         size_bytes=data.size_bytes,
@@ -145,14 +165,10 @@ async def submit_final_attempt_route(
     attempt_id: int,
     duration_seconds: int = Form(..., alias="duration_sec"),
     audio: UploadFile = File(...),
-    current_user: dict = Depends(get_current_user),
+    user_id: int = Depends(get_current_user_id),
     db=Depends(get_session),
 ):
-    user = db.exec(select(User).where(User.email == current_user["email"])).first()
-    if not user:
-        user = db.exec(
-            select(User).where(User.username == current_user["username"])
-        ).first()
+    user = db.get(User, user_id)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
@@ -214,18 +230,14 @@ async def submit_final_attempt_route(
 @router.get("/result/{job_id}", response_model=AttemptResultResponse)
 async def get_attempt_by_job_id(
     job_id: int,
-    current_user: dict = Depends(get_current_user),
+    user_id: int = Depends(get_current_user_id),
     db=Depends(get_session),
 ):
-    user = db.exec(select(User).where(User.email == current_user["email"])).first()
-    if not user:
-        user = db.exec(
-            select(User).where(User.username == current_user["username"])
-        ).first()
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
-        )
+    # user = db.get(User, user_id)
+    # if not user:
+    #     raise HTTPException(
+    #         status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
+    #     )
 
     return get_attempt_result(db=db, job_id=job_id)
 
@@ -233,14 +245,10 @@ async def get_attempt_by_job_id(
 @router.get("/analysis/{job_id}")
 async def get_attempt_analysis(
     job_id: int,
-    current_user: dict = Depends(get_current_user),
+    user_id: int = Depends(get_current_user_id),
     db=Depends(get_session),
 ):
-    user = db.exec(select(User).where(User.email == current_user["email"])).first()
-    if not user:
-        user = db.exec(
-            select(User).where(User.username == current_user["username"])
-        ).first()
+    user = db.get(User, user_id)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
@@ -252,14 +260,10 @@ async def get_attempt_analysis(
 @router.get("/result/final/{session_id}")
 async def get_final_attempt_by_job_id(
     session_id: int,
-    current_user: dict = Depends(get_current_user),
+    user_id: int = Depends(get_current_user_id),
     db=Depends(get_session),
 ):
-    user = db.exec(select(User).where(User.email == current_user["email"])).first()
-    if not user:
-        user = db.exec(
-            select(User).where(User.username == current_user["username"])
-        ).first()
+    user = db.get(User, user_id)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="User not found"

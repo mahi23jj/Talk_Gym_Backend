@@ -9,7 +9,7 @@
 # from app.models.recording import Recording
 # from app.schemas.audio import AudioUploadResponse
 # from app.services.Ai_Transaltion import transcribe_audio
-# from app.services.auth import get_current_user
+# from app.services.auth import get_current_user_id
 # from app.services.ai_service import mock_transcript
 # from app.services.rate_limiter import enforce_rate_limit
 # from app.services.storage_validator import validate_audio_constraints

@@ -49,17 +49,12 @@
 #     db.add(RequestLog(user_id=user_id, endpoint=endpoint))
 #     db.commit()
 
+# app/core/rate_limiter.py
 import time
 from fastapi import HTTPException
 from app.core.redis import async_redis_client
 
-
 class FastRateLimiter:
-    """
-    Ultra-fast rate limiter using INCR only.
-    No Lua, no hashes, no complexity.
-    """
-
     @staticmethod
     async def enforce(
         user_id: int,
@@ -67,21 +62,16 @@ class FastRateLimiter:
         limit: int,
         window_seconds: int = 60,
     ) -> None:
-        fn_start = time.perf_counter()
         key = f"rl:{user_id}:{endpoint}:{int(time.time() / window_seconds)}"
-
-        incr_start = time.perf_counter()
-        count = await async_redis_client.incr(key)
-        incr_ms = (time.perf_counter() - incr_start) * 1000
-        print(f"[TIMING:RateLimiter] INCR: {incr_ms:.2f}ms")
-
-        # set expiry ONLY on first request
-        if count == 1:
-            expire_start = time.perf_counter()
-            await async_redis_client.expire(key, window_seconds)
-            expire_ms = (time.perf_counter() - expire_start) * 1000
-            print(f"[TIMING:RateLimiter] EXPIRE: {expire_ms:.2f}ms")
-
+        
+        # Use pipeline to reduce network round trips
+        pipeline = async_redis_client.pipeline()
+        pipeline.incr(key)
+        pipeline.expire(key, window_seconds)
+        results = await pipeline.execute()
+        
+        count = results[0]  # First result is incr value
+        
         if count > limit:
             raise HTTPException(
                 status_code=429,
@@ -91,9 +81,6 @@ class FastRateLimiter:
                 },
                 headers={"Retry-After": str(window_seconds)},
             )
-        
-        total_ms = (time.perf_counter() - fn_start) * 1000
-        print(f"[TIMING:RateLimiter] TOTAL: {total_ms:.2f}ms, count={count}")
 
 # import time
 

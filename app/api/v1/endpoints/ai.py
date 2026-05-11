@@ -5,7 +5,7 @@ from app.core.config import settings
 from app.db.postgran import get_session
 from app.models.auth import User
 from app.schemas.usage import AIRequestSchema, AIResponseSchema, UsageSummarySchema
-from app.services.auth import get_current_user
+from app.services.auth import get_current_user_id
 # from app.services.rate_limiter import enforce_rate_limit
 from app.services.usage_tracker import enforce_and_increment_usage
 
@@ -16,11 +16,9 @@ router = APIRouter(prefix="/ai", tags=["AI"])
 async def process_ai_request(
     payload: AIRequestSchema,
     db=Depends(get_session),
-    current_user: dict = Depends(get_current_user),
+    user_id: int = Depends(get_current_user_id),
 ):
-    user = db.exec(select(User).where(User.email == current_user["email"])).first()
-    if not user:
-        user = db.exec(select(User).where(User.username == current_user["username"])).first()
+    user = db.get(User, user_id)
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 

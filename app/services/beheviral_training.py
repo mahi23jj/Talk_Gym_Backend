@@ -4,6 +4,7 @@ from typing import Any
 from sqlmodel import Session, select
 from sqlalchemy.orm import selectinload
 
+from app.core import redis
 from app.models.interview import Attempt
 from fastapi import HTTPException, status
 
@@ -39,6 +40,12 @@ async def summit_behevioral_traning(
         .options(selectinload(TrainingAttempt.analysis))
     ).all()
 
+    if len(previous_attempts) >= 2:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Max behavioral training attempts reached",
+        )
+
     for existing in previous_attempts:
         existing_analysis = existing.analysis
         if existing_analysis and existing_analysis.passed:
@@ -47,11 +54,7 @@ async def summit_behevioral_traning(
                 detail="Behavioral training already passed for this attempt",
             )
 
-    if len(previous_attempts) >= 2:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Max behavioral training attempts reached",
-        )
+
 
     training_attempt = TrainingAttempt(
         attempt_id=attempt_id,
@@ -95,7 +98,7 @@ async def summit_behevioral_traning(
 
 
 
-def get_behvioral_attempt_result(db: Session,  training_attempt_id: int , job_id: int) -> dict[str, Any]:
+async def get_behvioral_attempt_result(db: Session,  training_attempt_id: int , job_id: int) -> dict[str, Any]:
     job_entry = db.get(Job, job_id)
     if not job_entry:
         raise HTTPException(
@@ -107,29 +110,25 @@ def get_behvioral_attempt_result(db: Session,  training_attempt_id: int , job_id
             "status": "pending",
             "message": "Your attempt is still being processed. Please check back later.",
         }
-    elif job_entry.status == "failed":
+    if job_entry.status == "failed":
         return {
             "status": "failed",
             "message": "Processing of your attempt failed. Please try again.",
         }
-    else:
 
-        analysis = db.exec(
-            select(TrainingAnalysis).where(
-                TrainingAnalysis.training_attempt_id == training_attempt_id
-            )
-        ).first()
+        
+    cached = await async_redis_client.get(f"behavioral_result:{job_id}")
 
-    if not analysis:
+    if not cached:
         return {"status": "processing", "message": "Finalizing analysis..."}
 
     return {
         "status": "done",
         "analysis": {
-            "id": analysis.id,
-            "training_attempt_id": analysis.training_attempt_id,
-            "passed": analysis.passed,
-            "feedback": analysis.feedback,
-            "score": analysis.score,
+            "id": cached.id,
+            "training_attempt_id": cached.training_attempt_id,
+            "passed": cached.passed,
+            "feedback": cached.feedback,
+            "score": cached.score,
         },
     }

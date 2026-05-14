@@ -31,9 +31,9 @@ async def submit_training(
     user_id: int = Depends(get_current_user_id),
     db=Depends(get_session),
 ):
-    user = db.get(User, user_id)
+    """  user = db.get(User, user_id)
     if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found") """
 
     # if payload.training_type == TrainingMode.behavioral_training:
     #     return await summit_behevioral_traning(
@@ -45,7 +45,7 @@ async def submit_training(
 
     return await summit_behevioral_traning(
             db=db,
-            user_id=user.id,
+            user_id=user_id,
             attempt_id=payload.attempt_id,
             transcript=payload.transcript,
         )
@@ -57,7 +57,7 @@ async def get_training_results(
     user_id: int = Depends(get_current_user_id),
     db=Depends(get_session),
 ):
-    user = db.get(User, user_id)
+    """  user = db.get(User, user_id)
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
@@ -68,6 +68,8 @@ async def get_training_results(
     #         attempt_id=payload.attempt_id,
     #         transcript=payload.transcript,
     #     )
+
+    """
 
     return get_behvioral_attempt_result(
             db=db,

@@ -15,7 +15,7 @@ from app.models.job import Job
 from app.models.interview import InterviewAnalysis, InterviewSession
 
 from app.core.redis import async_redis_client, TRANSCRIPTION_QUEUE
-from app.services.uplode_service import upload_audio_to_cloudinary
+
 
 
 async def submit_normal_attempt(

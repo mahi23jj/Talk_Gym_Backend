@@ -33,7 +33,6 @@ from app.services.interview import (
 )
 from app.services.rate_limiter import FastRateLimiter
 from app.services.storage_validator import validate_audio_constraints
-from app.services.uplode_service import upload_audio_to_cloudinary
 from fastapi import BackgroundTasks
 
 router = APIRouter(prefix="/attempt", tags=["Attempt"])
@@ -163,60 +162,51 @@ async def submit_attempt(
 @router.post("/submit/final/{attempt_id}", response_model=FinalAttemptSubmitResponse)
 async def submit_final_attempt_route(
     attempt_id: int,
-    duration_seconds: int = Form(..., alias="duration_sec"),
-    audio: UploadFile = File(...),
+    duration_seconds: int,
+    size_bytes: int ,
+    audio_url: str ,
     user_id: int = Depends(get_current_user_id),
     db=Depends(get_session),
 ):
-    user = db.get(User, user_id)
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
-        )
-
+   
     attempt = db.get(Attempt, attempt_id)
     if not attempt:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Attempt not found"
         )
-    if attempt.user_id != user.id:
+    if attempt.user_id != user_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Attempt does not belong to user",
         )
 
-    # await enforce_rate_limit(
-    #     db=db,
-    #     user_id=user.id,
-    #     endpoint="/api/v1/upload/audio",
-    #     minute_limit=settings.rate_limit_per_minute,
-    #     hour_limit=settings.rate_limit_per_hour,
-    # )
-
-    content = await audio.read()
-    size_bytes = len(content)
-
-    await validate_audio_constraints(
-        db=db,
-        user_id=user.id,
-        size_bytes=size_bytes,
-        duration_seconds=duration_seconds,
-        max_size_bytes=settings.max_audio_size_bytes,
-        max_duration_seconds=settings.max_audio_duration_seconds,
-        daily_upload_limit=40,
+    await FastRateLimiter.enforce(
+        user_id=user_id,
+        endpoint="/api/v1/attempt/submit/final/{attempt_id}",
+        limit=5,
+        window_seconds=60,
     )
 
-    try:
-        audio_url = upload_audio_to_cloudinary(content, audio.filename or "audio.m4a")
-    except ValueError as exc:
+    # await validate_audio_constraints(
+    #     db=db,
+    #     user_id=user_id,
+    #     size_bytes=size_bytes,
+    #     duration_seconds=duration_seconds,
+    #     max_size_bytes=settings.max_audio_size_bytes,
+    #     max_duration_seconds=settings.max_audio_duration_seconds,
+    #     daily_upload_limit=40,
+    # )
+
+    if duration_seconds > settings.max_audio_duration_seconds:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
-        ) from exc
-    except Exception as exc:
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Audio duration exceeds limit of {settings.max_audio_duration_seconds} seconds",
+        )
+    if duration_seconds <= 0:
         raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Audio upload failed",
-        ) from exc
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Audio duration must be greater than zero",
+        )
 
     return await submit_final_attempt(
         db=db,
@@ -263,12 +253,12 @@ async def get_final_attempt_by_job_id(
     user_id: int = Depends(get_current_user_id),
     db=Depends(get_session),
 ):
-    user = db.get(User, user_id)
+    """  user = db.get(User, user_id)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
         )
-
+    
     attempt = db.get(
         InterviewSession,
         session_id,
@@ -282,5 +272,6 @@ async def get_final_attempt_by_job_id(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="session does not belong to user",
         )
+    """
 
     return get_final_attempt_result(db=db, session_id=session_id)

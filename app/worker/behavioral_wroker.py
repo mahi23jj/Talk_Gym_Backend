@@ -98,7 +98,18 @@ async def worker() -> None:
 
                 await async_redis_client.set(
                     f"behavioral_result:{job_id}",
-                    json.dumps(analysis.dict(), default=str),
+                    json.dumps(
+                        {
+                            "id": analysis.id,
+                            "training_attempt_id": analysis.training_attempt_id,
+                            "score": analysis.score,
+                            "passed": analysis.passed,
+                            "feedback": analysis.feedback,
+                            "raw_analysis_json": analysis.raw_analysis_json,
+                            "created_at": analysis.created_at.isoformat(),
+                        },
+                        default=str,
+                    ),
                     ex=3600,
                 )
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from io import BytesIO
 from pathlib import Path
+import asyncio
 
 import cloudinary.uploader
 
@@ -17,6 +18,16 @@ async def upload_audio_to_cloudinary(file_content: bytes, filename: str) -> str:
     upload_stream = BytesIO(file_content)
     upload_stream.name = filename
 
-    result = await cloudinary.uploader.upload(upload_stream, resource_type="video")
+    # cloudinary.uploader.upload is synchronous; run it in a thread to avoid blocking
+    result = await asyncio.to_thread(
+        cloudinary.uploader.upload, upload_stream, resource_type="video"
+    )
 
-    return result["secure_url"]
+    # size of the uploaded file in bytes    file_size = result.get("bytes", 0)
+    print(f"Uploaded file size: {result.get('bytes', 0)} bytes")
+
+
+    return {
+        "url": result.get("secure_url"),
+        "size": result.get("bytes", 0),
+    }

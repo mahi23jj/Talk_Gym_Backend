@@ -235,9 +235,7 @@ from app.db.postgran import get_session
 from app.models.auth import User
 from app.schemas.auth import UserSignInschema, UserLoginSchema
 
-# =========================
-# Security Setup
-# =========================
+
 
 bcrypt_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -246,9 +244,7 @@ oauth_bearer = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token")
 GOOGLE_CLIENT_ID = settings.google_client_id
 
 
-# =========================
-# Password Utils
-# =========================
+
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -259,9 +255,7 @@ def get_password_hash(password: str) -> str:
     return bcrypt_context.hash(password)
 
 
-# =========================
-# JWT
-# =========================
+
 
 
 def create_access_token(user_id: int, expires_delta: int | None = None) -> str:
@@ -298,9 +292,7 @@ def get_current_user_id(token: str = Depends(oauth_bearer)) -> int:
         )
 
 
-# =========================
-# DB Helpers
-# =========================
+
 
 
 async def get_user_by_email(db: Session, email: str):
@@ -311,9 +303,7 @@ async def get_user_by_username(db: Session, username: str):
     return db.exec(select(User).where(User.username == username)).first()
 
 
-# =========================
-# Signup
-# =========================
+
 
 
 async def sign_in_user(user: UserSignInschema, db: Session) -> str:
@@ -344,9 +334,7 @@ async def sign_in_user(user: UserSignInschema, db: Session) -> str:
     )
 
 
-# =========================
-# Login
-# =========================
+
 
 
 async def login_user(credentials: UserLoginSchema, db: Session) -> str:
@@ -383,9 +371,6 @@ async def login_with_access_token(
     return {"access_token": token, "token_type": "bearer"}
 
 
-# =========================
-# Google Auth
-# =========================
 
 
 def verify_google_token(token: str):

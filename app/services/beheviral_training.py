@@ -21,20 +21,28 @@ import json
 async def summit_behevioral_traning(
     db: Session,
     user_id: int,
-    attempt_id: int,
+    job_id: int,
     transcript: str,
 
 ) -> dict[str, Any]:
-    attempt = db.get(Attempt, attempt_id)
+    # get attemptid from job
+
+    job = db.get(Job, job_id)
+    if not job:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Job not found"
+        )
+
+    attempt = db.get(Attempt, job.attempt_id)
     if not attempt:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attempt not found")
-    if attempt.user_id != user_id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Attempt does not belong to user")
-     
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Associated attempt not found"
+        )
+
     previous_attempts = db.exec(
         select(TrainingAttempt)
         .where(
-            TrainingAttempt.attempt_id == attempt_id,
+            TrainingAttempt.attempt_id == attempt.id,
             TrainingAttempt.training_type == TrainingMode.behavioral_training,
         )
         .options(selectinload(TrainingAttempt.analysis))
@@ -57,7 +65,7 @@ async def summit_behevioral_traning(
 
 
     training_attempt = TrainingAttempt(
-        attempt_id=attempt_id,
+        attempt_id=attempt.id,
         training_type=TrainingMode.behavioral_training,
         transcript=transcript,
     )
@@ -77,14 +85,14 @@ async def summit_behevioral_traning(
     payload = {
         "job_id": job_entry.id,
         "user_id": user_id,
-        "attempt_id": attempt_id,
+        "attempt_id": attempt.id,
         "training_attempt_id": training_attempt.id,
         "question_id": question.id if question else attempt.question_id,
         "question_text": question_text,
         "transcript": transcript,
     }
 
-    async_redis_client.rpush(
+    await async_redis_client.rpush(
         ANALYSIS_QUEUE,
         json.dumps(payload),
     )
@@ -98,7 +106,7 @@ async def summit_behevioral_traning(
 
 
 
-async def get_behvioral_attempt_result(db: Session,  training_attempt_id: int , job_id: int) -> dict[str, Any]:
+async def get_behvioral_attempt_result(db: Session, job_id: int) -> dict[str, Any]:
     job_entry = db.get(Job, job_id)
     if not job_entry:
         raise HTTPException(
@@ -122,13 +130,8 @@ async def get_behvioral_attempt_result(db: Session,  training_attempt_id: int , 
     if not cached:
         return {"status": "processing", "message": "Finalizing analysis..."}
 
+    analysis_data = json.loads(cached)
     return {
         "status": "done",
-        "analysis": {
-            "id": cached.id,
-            "training_attempt_id": cached.training_attempt_id,
-            "passed": cached.passed,
-            "feedback": cached.feedback,
-            "score": cached.score,
-        },
+        "analysis": analysis_data,
     }

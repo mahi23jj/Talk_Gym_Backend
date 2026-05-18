@@ -236,6 +236,7 @@ async def process_job(payload: dict):
                                 "attempt_id": analysis.attempt_id,
                                 "score": analysis.score,
                                 "feedback": analysis.feedback,
+                                "voice_metrics": analysis_payload.get("voice_metrics"),
                                 "raw_analysis_json": analysis.raw_analysis_json,
                                 "created_at": analysis.created_at.isoformat(),
                             },

@@ -1,12 +1,4 @@
-"""
-Behavioral Interview Analysis — Deterministic Fallback Engine
-============================================================
-Used when AI analyzer quota is exhausted.
-Designed to feel intelligent, not static — adaptive outputs,
-question-aware coaching, prioritized feedback, dynamic STAR examples.
 
-No LLM calls. All deterministic.
-"""
 
 from __future__ import annotations
 import re

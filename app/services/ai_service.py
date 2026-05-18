@@ -4,13 +4,143 @@ from typing import Any
 
 from app.models.enums import TrainingMode
 
-from openai import OpenAI
+
 import os
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
 
 from typing import Any
 import re
+
+from app.services.behavioral_analysis import analyze_behavioral_answer
+from app.services.behavioral_analysis_fallback import analyze_behavioral_answer_fallback
+
+# from __future__ import annotations
+
+# import json
+# import os
+# from typing import Any
+
+# from groq import Groq
+
+
+# client = Groq(
+#     api_key=os.getenv("GROQ_API_KEY")
+# )
+
+# MODEL = "llama-3.3-70b-versatile"
+
+
+# SIMULATED_AI_PROMPT = """
+# You are an expert behavioral interview evaluator.
+
+# STRICT RULES:
+# - Score like a senior FAANG interviewer
+# - Be strict, objective, and consistent
+# - Do NOT be motivational
+# - Output ONLY valid JSON
+
+# Question:
+# {question}
+
+# Answer:
+# {transcript}
+
+# Return JSON EXACTLY in this structure:
+
+# {
+#   "overall_score": float,
+#   "content": {
+#     "relevance": int,
+#     "clarity": int,
+#     "structure_star": int,
+#     "specificity": int
+#   },
+#   "behavioral": {
+#     "ownership": int,
+#     "initiative": int,
+#     "impact": int
+#   },
+#   "flags": [],
+#   "sentence_feedback": [],
+#   "behavioral_questions": [],
+#   "star_example": {},
+#   "primary_training_mode": "",
+#   "short_feedback": ""
+# }
+# """
+
+
+# BEHAVIORAL_PROMPT = """
+# You are an expert behavioral interview evaluator.
+
+# STRICT RULES:
+# - Focus only on ownership, initiative, impact
+# - Output ONLY valid JSON
+
+# Question:
+# {question}
+
+# Answer:
+# {transcript}
+
+# Return EXACTLY:
+
+# {
+#   "overall_Behevioral_score": float,
+#   "behavioral": {
+#     "ownership": int,
+#     "initiative": int,
+#     "impact": int
+#   },
+#   "flags": [],
+#   "short_feedback": "",
+#   "pass": bool
+# }
+# """
+
+
+# def _ask_groq(prompt: str) -> dict[str, Any]:
+#     response = client.chat.completions.create(
+#         model=MODEL,
+#         temperature=0.2,
+#         response_format={"type": "json_object"},
+#         messages=[
+#             {
+#                 "role": "system",
+#                 "content": "Return only valid JSON."
+#             },
+#             {
+#                 "role": "user",
+#                 "content": prompt
+#             }
+#         ],
+#     )
+
+#     content = response.choices[0].message.content
+#     return json.loads(content)
+
+
+# def mock_ai_analysis(transcript: Any, question: str) -> dict[str, Any]:
+#     prompt = SIMULATED_AI_PROMPT.format(
+#         question=question,
+#         transcript=str(transcript)
+#     )
+
+#     return _ask_groq(prompt)
+
+
+# def mock_ai_beveviral_analysis(
+#     transcript: Any,
+#     question: str
+# ) -> dict[str, Any]:
+
+#     prompt = BEHAVIORAL_PROMPT.format(
+#         question=question,
+#         transcript=str(transcript)
+#     )
+
+#     return _ask_groq(prompt)
 
 
 SIMULATED_AI_PROMPT = """You are an expert behavioral interview evaluator.
@@ -129,64 +259,6 @@ simulated_behavioral_prompt = """You are an expert behavioral interview coach.
 
 
 
-
-# def mock_ai_analysis(transcript: str, question: str) -> dict[str, Any]:
-#     prompt = SIMULATED_AI_PROMPT.format(question=question, transcript=transcript)
-
-#     response = client.chat.completions.create(
-#         model="gpt-4o-mini",
-#         messages=[
-#             {
-#                 "role": "system",
-#                 "content": (
-#                     "You are a strict interview scoring engine. "
-#                     "Return ONLY valid JSON. No extra text."
-#                 ),
-#             },
-#             {"role": "user", "content": prompt},
-#         ],
-#         response_format={"type": "json_object"},
-#     )
-
-#     result = json.loads(response.choices[0].message.content)
-
-#     def safe(path, default=0):
-#         try:
-#             val = result
-#             for p in path:
-#                 val = val[p]
-#             return val
-#         except:
-#             return default
-
-#     return {
-#         "overall_score": safe(["overall_score"]),
-#         "content": {
-#             "relevance": safe(["content", "relevance"]),
-#             "clarity": safe(["content", "clarity"]),
-#             "structure_star": safe(["content", "structure_star"]),
-#             "specificity": safe(["content", "specificity"]),
-#         },
-#         "behavioral": {
-#             "ownership": safe(["behavioral", "ownership"]),
-#             "initiative": safe(["behavioral", "initiative"]),
-#             "impact": safe(["behavioral", "impact"]),
-#         },
-#         "flags": result.get("flags", []),
-#         "primary_training_mode": result.get(
-#             "primary_training_mode", "structure_training"
-#         ),
-#         # 🔥 NEW: human-readable summary
-#         "short_feedback": result.get(
-#             "short_feedback",
-#             "Performance shows mixed structure and clarity; improvement needed in answer organization and specificity.",
-#         ),
-#         "simulated_prompt": SIMULATED_AI_PROMPT,
-#     }
-
-
-
-
 FILLER_WORDS = ["um", "uh", "like", "you know", "sort of", "kind of"]
 
 WEAK_PATTERNS = ["helped", "worked on", "involved in", "did some", "we "]
@@ -276,132 +348,137 @@ def mock_ai_analysis(transcript: Any, question: str) -> dict[str, Any]:
     transcript_sentences = _normalize_transcript_sentences(transcript)
     transcript_text = " ".join(item["sentence"] for item in transcript_sentences)
     text = transcript_text.lower()
-    word_count = len(text.split())
-    filler_word_count = _count_filler_words(text)
+    # word_count = len(text.split())
+    # filler_word_count = _count_filler_words(text)
 
-    # --- STRUCTURE ---
-    has_star = _contains_any(text, ["situation", "task", "action", "result"])
-    structure_star = 7 if has_star else 4
-
-    rambling = word_count > 100 and not has_star
-    if rambling:
-        structure_star -= 2
-
-    structure_star = max(2, min(10, structure_star))
-
-    # --- OWNERSHIP ---
-    ownership = 7
-    if "we" in text and "i" not in text:
-        ownership -= 2
-    if _contains_any(text, STRONG_OWNERSHIP_PHRASES):
-        ownership += 1
-
-    ownership = max(2, min(10, ownership))
-
-    # --- INITIATIVE ---
-    initiative = 6
-    if _contains_any(text, INITIATIVE_PHRASES):
-        initiative += 2
-
-    # --- IMPACT ---
-    has_metrics = bool(re.search(r"\d", text))
-    impact = 6 + (2 if has_metrics else -2)
-    impact = max(2, min(10, impact))
-
-    # --- CONTENT ---
-    clarity = max(3, 10 - (filler_word_count // 2) - (2 if rambling else 0))
-    relevance = 7 if question.lower().split()[0] in text else 6
-    specificity = 7 if _contains_any(text, ["specifically", "for example"]) else 5
-
-    # --- FLAGS ---
-    flags = []
-    if rambling:
-        flags.append("rambling")
-    if not has_metrics:
-        flags.append("no_measurable_impact")
-    if specificity < 6:
-        flags.append("low_specificity")
-    if _contains_any(text, ["they made me", "the team failed"]):
-        flags.append("blaming_language")
-
-    # --- SENTENCE FEEDBACK ---
-    sentence_feedback = []
-
-    for sentence_row in transcript_sentences:
-        idx = sentence_row["idx"]
-        sentence_text = sentence_row["sentence"]
-        is_weak, issue, issue_type = _is_weak_sentence(sentence_text)
-        if is_weak:
-            sentence_feedback.append({
-                "idx": idx,
-                "sentence_index": idx,
-                "sentence": sentence_text,
-                "indexed_sentence": f"[{idx}] {sentence_text}",
-                "issue": issue,
-                "improvement_type": issue_type,
-                "improved_example": _generate_improvement(sentence_text, issue_type)
-            })
-
-        if len(sentence_feedback) >= 5:
-            break
-
-    # --- TRAINING MODE ---
-    if structure_star < 6:
-        primary_training_mode = "structure_training"
-    if ownership < 6 or impact < 6:
-        primary_training_mode = "behavioral_training"
-    else:
-        primary_training_mode = "structure_training"
-
-    # --- BEHAVIORAL QUESTIONS ---
-    behavioral_questions = [
-        {
-            "question": "What exactly did YOU do?",
-            "target_improvement": "ownership",
-            "strong_answer_example": "I led the implementation and made key decisions."
-        },
-        {
-            "question": "What measurable result did you achieve?",
-            "target_improvement": "impact",
-            "strong_answer_example": "This reduced latency by 35%."
-        }
-    ]
-
-    # --- STAR EXAMPLE ---
-    star_example = {
-        "s": "During a project with performance issues.",
-        "t": "I was responsible for improving performance.",
-        "a": "I optimized database queries.",
-        "r": "This improved response time by 40%."
-    }
-
-    # --- SCORE ---
-    overall_score = round(
-        (relevance + clarity + structure_star + specificity + ownership + initiative + impact) / 7,
-        1
+    result = analyze_behavioral_answer_fallback(
+        transcript=transcript,
+        question=question,
     )
 
+    # # --- STRUCTURE ---
+    # has_star = _contains_any(text, ["situation", "task", "action", "result"])
+    # structure_star = 7 if has_star else 4
+
+    # rambling = word_count > 100 and not has_star
+    # if rambling:
+    #     structure_star -= 2
+
+    # structure_star = max(2, min(10, structure_star))
+
+    # # --- OWNERSHIP ---
+    # ownership = 7
+    # if "we" in text and "i" not in text:
+    #     ownership -= 2
+    # if _contains_any(text, STRONG_OWNERSHIP_PHRASES):
+    #     ownership += 1
+
+    # ownership = max(2, min(10, ownership))
+
+    # # --- INITIATIVE ---
+    # initiative = 6
+    # if _contains_any(text, INITIATIVE_PHRASES):
+    #     initiative += 2
+
+    # # --- IMPACT ---
+    # has_metrics = bool(re.search(r"\d", text))
+    # impact = 6 + (2 if has_metrics else -2)
+    # impact = max(2, min(10, impact))
+
+    # # --- CONTENT ---
+    # clarity = max(3, 10 - (filler_word_count // 2) - (2 if rambling else 0))
+    # relevance = 7 if question.lower().split()[0] in text else 6
+    # specificity = 7 if _contains_any(text, ["specifically", "for example"]) else 5
+
+    # # --- FLAGS ---
+    # flags = []
+    # if rambling:
+    #     flags.append("rambling")
+    # if not has_metrics:
+    #     flags.append("no_measurable_impact")
+    # if specificity < 6:
+    #     flags.append("low_specificity")
+    # if _contains_any(text, ["they made me", "the team failed"]):
+    #     flags.append("blaming_language")
+
+    # # --- SENTENCE FEEDBACK ---
+    # sentence_feedback = []
+
+    # for sentence_row in transcript_sentences:
+    #     idx = sentence_row["idx"]
+    #     sentence_text = sentence_row["sentence"]
+    #     is_weak, issue, issue_type = _is_weak_sentence(sentence_text)
+    #     if is_weak:
+    #         sentence_feedback.append({
+    #             "idx": idx,
+    #             "sentence_index": idx,
+    #             "sentence": sentence_text,
+    #             "indexed_sentence": f"[{idx}] {sentence_text}",
+    #             "issue": issue,
+    #             "improvement_type": issue_type,
+    #             "improved_example": _generate_improvement(sentence_text, issue_type)
+    #         })
+
+    #     if len(sentence_feedback) >= 5:
+    #         break
+
+    # # --- TRAINING MODE ---
+    # if structure_star < 6:
+    #     primary_training_mode = "structure_training"
+    # if ownership < 6 or impact < 6:
+    #     primary_training_mode = "behavioral_training"
+    # else:
+    #     primary_training_mode = "structure_training"
+
+    # # --- BEHAVIORAL QUESTIONS ---
+    # behavioral_questions = [
+    #     {
+    #         "question": "What exactly did YOU do?",
+    #         "target_improvement": "ownership",
+    #         "strong_answer_example": "I led the implementation and made key decisions."
+    #     },
+    #     {
+    #         "question": "What measurable result did you achieve?",
+    #         "target_improvement": "impact",
+    #         "strong_answer_example": "This reduced latency by 35%."
+    #     }
+    # ]
+
+    # # --- STAR EXAMPLE ---
+    # star_example = {
+    #     "s": "During a project with performance issues.",
+    #     "t": "I was responsible for improving performance.",
+    #     "a": "I optimized database queries.",
+    #     "r": "This improved response time by 40%."
+    # }
+
+    # # --- SCORE ---
+    # overall_score = round(
+    #     (relevance + clarity + structure_star + specificity + ownership + initiative + impact) / 7,
+    #     1
+    # )
+
     return {
-        "overall_score": overall_score,
+        "overall_score": result['overall_score'],
         "transcript": transcript_text,
         "transcript_sentences": transcript_sentences,
         "content": {
-            "relevance": relevance,
-            "clarity": clarity,
-            "structure_star": structure_star,
-            "specificity": specificity,
+            "relevance": result['scores']['relevance'],
+            "clarity": result['scores']['clarity'],
+            "structure_star": result['scores']['structure'],
+            "specificity": result['scores']['specificity'],
         },
         "behavioral": {
-            "ownership": ownership,
-            "initiative": initiative,
-            "impact": impact,
+            "ownership": result['scores']['ownership'],
+            "initiative": result['scores']['initiative'],
+            "impact": result['scores']['impact'],
         },
-        "flags": flags,
-        "sentence_feedback": sentence_feedback,
-        "behavioral_questions": behavioral_questions,
-        "star_example": star_example,
-        "primary_training_mode": primary_training_mode,
-        "short_feedback": "Answer lacks strong ownership and measurable impact. Structure is partially clear but needs more specific actions and results.",
+        "flags": result['flags'],
+        "sentence_feedback": result['sentence_feedback'],
+        "behavioral_questions": result['followup_questions'],
+        "star_example": result['star_example'],
+        "primary_training_mode": result['primary_training_mode'],
+        "short_feedback": result['feedback'],
     }
 
 
@@ -412,62 +489,64 @@ def mock_ai_beveviral_analysis(transcript: Any, question: str) -> dict[str, Any]
     transcript_text = " ".join(item["sentence"] for item in transcript_sentences)
     text = transcript_text.lower()
 
-    has_metrics = bool(re.search(r"\d", text))
-    has_blaming = _contains_any(text, ["they made me", "the team failed", "my manager blocked", "it was their fault"])
+    result = analyze_behavioral_answer(text, question )
 
-    ownership = 6
-    if _contains_any(text, WEAK_PATTERNS):
-        ownership -= 2
-    if _contains_any(text, STRONG_OWNERSHIP_PHRASES):
-        ownership += 2
-    if " we " in f" {text} " and " i " not in f" {text} ":
-        ownership -= 2
-    ownership = max(0, min(10, ownership))
+    # has_metrics = bool(re.search(r"\d", text))
+    # has_blaming = _contains_any(text, ["they made me", "the team failed", "my manager blocked", "it was their fault"])
 
-    initiative = 5
-    if _contains_any(text, INITIATIVE_PHRASES):
-        initiative += 2
-    if _contains_any(text, ["i took initiative", "i drove", "i volunteered", "i proactively"]):
-        initiative += 1
-    initiative = max(0, min(10, initiative))
+    # ownership = 6
+    # if _contains_any(text, WEAK_PATTERNS):
+    #     ownership -= 2
+    # if _contains_any(text, STRONG_OWNERSHIP_PHRASES):
+    #     ownership += 2
+    # if " we " in f" {text} " and " i " not in f" {text} ":
+    #     ownership -= 2
+    # ownership = max(0, min(10, ownership))
 
-    impact = 5
-    if has_metrics:
-        impact += 3
-    else:
-        impact -= 1
-    if _contains_any(text, IMPACT_KEYWORDS):
-        impact += 1
-    impact = max(0, min(10, impact))
+    # initiative = 5
+    # if _contains_any(text, INITIATIVE_PHRASES):
+    #     initiative += 2
+    # if _contains_any(text, ["i took initiative", "i drove", "i volunteered", "i proactively"]):
+    #     initiative += 1
+    # initiative = max(0, min(10, initiative))
 
-    flags: list[str] = []
-    if has_blaming:
-        flags.append("blaming_language")
+    # impact = 5
+    # if has_metrics:
+    #     impact += 3
+    # else:
+    #     impact -= 1
+    # if _contains_any(text, IMPACT_KEYWORDS):
+    #     impact += 1
+    # impact = max(0, min(10, impact))
 
-    passed = ownership >= 6 and initiative >= 6 and impact >= 6 and "blaming_language" not in flags
-    overall_behavioral_score = round((ownership + initiative + impact) / 3, 1)
+    # flags: list[str] = []
+    # if has_blaming:
+    #     flags.append("blaming_language")
 
-    if not passed:
-        short_feedback = (
-            "Behavioral signal is not strong enough yet. Increase ownership language, show clearer initiative, "
-            "and include measurable impact from your actions."
-        )
-    else:
-        short_feedback = (
-            "Behavioral signal is acceptable. Ownership, initiative, and impact are visible and mostly concrete."
-        )
+    # passed = ownership >= 6 and initiative >= 6 and impact >= 6 and "blaming_language" not in flags
+    # overall_behavioral_score = round((ownership + initiative + impact) / 3, 1)
+
+    # if not passed:
+    #     short_feedback = (
+    #         "Behavioral signal is not strong enough yet. Increase ownership language, show clearer initiative, "
+    #         "and include measurable impact from your actions."
+    #     )
+    # else:
+    #     short_feedback = (
+    #         "Behavioral signal is acceptable. Ownership, initiative, and impact are visible and mostly concrete."
+    #     )
 
     return {
-        "overall_Behevioral_score": overall_behavioral_score,
-        "overall_score": overall_behavioral_score,
+        "overall_Behevioral_score": result['overall_score'],
+        "overall_score": result['overall_score'],
         "behavioral": {
-            "ownership": ownership,
-            "initiative": initiative,
-            "impact": impact,
+            "ownership": result['ownership'],
+            "initiative": result['initiative'],
+            "impact": result['impact'],
         },
-        "flags": flags,
-        "short_feedback": short_feedback,
-        "pass": passed,
+        "flags": result['flags'],
+        "short_feedback": result['feedback'],
+        "pass": result['passed'],
         "question": question,
         "transcript": transcript_text,
         "transcript_sentences": transcript_sentences,

@@ -12,7 +12,7 @@ from app.models.job import Job
 from app.models.interview import Attempt, InterviewAnalysis, InterviewSession
 from app.models.question import Question
 
-from app.core.redis import async_redis_client, TRANSCRIPTION_QUEUE 
+from app.core.redis import async_redis_client, TRANSCRIPTION 
 
 
 from datetime import timezone
@@ -431,7 +431,13 @@ async def submit_final_attempt(
     size_bytes: int,
 ) -> dict[str, Any]:
 
-    attempt = db.get(Attempt, attempt_id)
+    job_entry = db.get(Job, attempt_id)
+    if not job_entry:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="job not found"
+        )
+
+    attempt = db.get(Attempt, job_entry.attempt_id)
     if not attempt:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Attempt not found"
@@ -464,7 +470,7 @@ async def submit_final_attempt(
 
      # Pipeline Redis operations
     pipeline = async_redis_client.pipeline()
-    pipeline.rpush(TRANSCRIPTION_QUEUE, json.dumps(payload))
+    pipeline.rpush(TRANSCRIPTION, json.dumps(payload))
     await pipeline.execute()
     
         

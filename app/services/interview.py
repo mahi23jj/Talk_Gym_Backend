@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 from app.models.job import Job
 from app.models.interview import InterviewAnalysis, InterviewSession
 
-from app.core.redis import async_redis_client, TRANSCRIPTION_QUEUE
+from app.core.redis import async_redis_client, TRANSCRIPTION
 
 
 
@@ -56,7 +56,7 @@ async def submit_normal_attempt(
         # Pipeline Redis operations
         redis_start = time.perf_counter()
         pipeline = async_redis_client.pipeline()
-        pipeline.rpush(TRANSCRIPTION_QUEUE, json.dumps(payload))
+        pipeline.rpush(TRANSCRIPTION, json.dumps(payload))
         await pipeline.execute()
         redis_time_ms = (time.perf_counter() - redis_start) * 1000
         print(f"[TIMING:submit_normal_attempt] Redis enqueue: {redis_time_ms:.2f}ms")
@@ -104,15 +104,21 @@ async def get_attempt_result(db: Session, job_id: int) -> dict[str, Any]:
             "message": "Finalizing analysis..."
         }
     
-    cached = await redis.get(f"attempt_result:{job_id}")
+    # Fetch the actual analysis from database
+    analysis = db.exec(
+        select(InterviewAnalysis).where(
+            InterviewAnalysis.attempt_id == job_entry.attempt_id
+        )
+    ).first()
 
-    if cached:
-        return {
-            "status": "done",
-            "analysis": json.loads(cached)
-            }
+    if not analysis:
+        return {"status": "processing", "message": "Finalizing analysis..."}
 
-    return {"status": "processing", "message": "Finalizing analysis..."}
+    return {
+        "status": "done",
+        "message": None,
+        "analysis": analysis
+    }
 
     
 
@@ -125,6 +131,12 @@ async def get_analysis_result(db: Session, job_id: int) -> dict[str, Any]:
             status_code=status.HTTP_404_NOT_FOUND, detail="Job not found"
         )
 
+    # Try to get from cache first
+    cached = await async_redis_client.get(f"attempt_result:{job_id}")
+    if cached:
+        return json.loads(cached)
+
+    # Fall back to database
     analysis = db.exec(
         select(InterviewAnalysis).where(
             InterviewAnalysis.attempt_id == job_entry.attempt_id

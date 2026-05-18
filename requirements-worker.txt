@@ -1,5 +1,5 @@
-openai-whisper
-openai
+faster-whisper  
+groq
 imageio-ffmpeg
 # numpy<2
 python-dotenv

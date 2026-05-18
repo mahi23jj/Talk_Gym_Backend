@@ -158,27 +158,25 @@ async def submit_attempt(
 
     return result
 
-
-@router.post("/submit/final/{attempt_id}", response_model=FinalAttemptSubmitResponse)
+# response_model=FinalAttemptSubmitResponse
+@router.post("/submit/final/{attempt_id}")
 async def submit_final_attempt_route(
     attempt_id: int,
-    duration_seconds: int,
-    size_bytes: int ,
-    audio_url: str ,
+    data: AttemptSubmitSchema,
     user_id: int = Depends(get_current_user_id),
     db=Depends(get_session),
 ):
    
-    attempt = db.get(Attempt, attempt_id)
-    if not attempt:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Attempt not found"
-        )
-    if attempt.user_id != user_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Attempt does not belong to user",
-        )
+    # attempt = db.get(Attempt, attempt_id)
+    # if not attempt:
+    #     raise HTTPException(
+    #         status_code=status.HTTP_404_NOT_FOUND, detail="Attempt not found"
+    #     )
+    # if attempt.user_id != user_id:
+    #     raise HTTPException(
+    #         status_code=status.HTTP_403_FORBIDDEN,
+    #         detail="Attempt does not belong to user",
+    #     )
 
     await FastRateLimiter.enforce(
         user_id=user_id,
@@ -197,12 +195,12 @@ async def submit_final_attempt_route(
     #     daily_upload_limit=40,
     # )
 
-    if duration_seconds > settings.max_audio_duration_seconds:
+    if data.duration_seconds > settings.max_audio_duration_seconds:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Audio duration exceeds limit of {settings.max_audio_duration_seconds} seconds",
         )
-    if duration_seconds <= 0:
+    if data.duration_seconds <= 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Audio duration must be greater than zero",
@@ -211,9 +209,9 @@ async def submit_final_attempt_route(
     return await submit_final_attempt(
         db=db,
         attempt_id=attempt_id,
-        audio_url=audio_url,
-        duration_seconds=duration_seconds,
-        size_bytes=size_bytes,
+        audio_url=data.audio_url,
+        duration_seconds=data.duration_seconds,
+        size_bytes=data.size_bytes,
     )
 
 
@@ -229,7 +227,7 @@ async def get_attempt_by_job_id(
     #         status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
     #     )
 
-    return get_attempt_result(db=db, job_id=job_id)
+    return await get_attempt_result(db=db, job_id=job_id)
 
 
 @router.get("/analysis/{job_id}")
@@ -244,7 +242,7 @@ async def get_attempt_analysis(
             status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
         )
 
-    return get_analysis_result(db=db, job_id=job_id)
+    return await get_analysis_result(db=db, job_id=job_id)
 
 
 @router.get("/result/final/{session_id}")
@@ -253,25 +251,5 @@ async def get_final_attempt_by_job_id(
     user_id: int = Depends(get_current_user_id),
     db=Depends(get_session),
 ):
-    """  user = db.get(User, user_id)
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
-        )
-    
-    attempt = db.get(
-        InterviewSession,
-        session_id,
-    )
-    if not attempt:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="session not found"
-        )
-    if attempt.user_id != user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="session does not belong to user",
-        )
-    """
 
-    return get_final_attempt_result(db=db, session_id=session_id)
+    return await get_final_attempt_result(db=db, session_id=session_id)

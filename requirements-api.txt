@@ -13,5 +13,11 @@ psycopg2-binary
 redis
 cloudinary
 google-auth
+faster-whisper  
+groq
+imageio-ffmpeg
+numpy
+librosa
+
 
 

@@ -4,23 +4,15 @@ import json
 from typing import Any
 
 from fastapi import HTTPException, status
-from sqlmodel import Session, select
 from sqlalchemy.orm import selectinload
-
-from app.models.enums import AttemptStage
-from app.models.job import Job
-from app.models.interview import Attempt, InterviewAnalysis, InterviewSession
-from app.models.question import Question
-
-from app.core.redis import async_redis_client, TRANSCRIPTION 
-
-
-from datetime import timezone
-from typing import Any
-
-from fastapi import HTTPException, status
 from sqlmodel import Session, select
+
+from app.core.redis import async_redis_client
+from app.models.enums import AttemptStage
+from app.models.interview import Attempt, InterviewAnalysis, InterviewSession
 from app.models.job import Job
+from app.models.question import Question
+from app.services.interview import process_job_sync
 
 
 # =========================================================
@@ -330,99 +322,43 @@ def build_interview_report(
 async def get_session_result(
     db: Session,
     session_id: int,
+    job_id: int,
 ) -> dict[str, Any]:
-
-    # session_entry = db.get(
-    #     InterviewSession,
-    #     session_id,
-    # )
-
-    # if not session_entry:
-    #     raise HTTPException(
-    #         status_code=404,
-    #         detail="Interview session not found",
-    #     )
     
-    cached = await async_redis_client.get(
-        f"session_result:{session_id}"
-    )
-
-    if cached:
-        return json.loads(cached)
-
-    return {
-        "status": "processing",
-        "message": "Finalizing analysis..."
-       }
-
-    """  attempts = db.exec(
-        select(Attempt)
-        .where(Attempt.session_id == session_id)
-        .options(selectinload(Attempt.analysis), selectinload(Attempt.recording))
-    ).all()
-
-    initial_attempt = next(
-        (
-            a for a in attempts
-            if a.stage == AttemptStage.INITIAL
-        ),
-        None,
-    )
-
-    final_attempt = next(
-        (
-            a for a in attempts
-            if a.stage == AttemptStage.FINAL
-        ),
-        None,
-    )
-
-    if not initial_attempt:
+    job = db.get(Job, job_id)
+    if not job:
         raise HTTPException(
-            status_code=404,
-            detail="Initial attempt not found",
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Job not found",
         )
+    
 
-    if not final_attempt:
-        return {
-            "status": "in_progress",
-            "message": "Final interview not submitted yet.",
-        }
-
-    final_job = db.exec(
-        select(Job).where(
-            Job.attempt_id == final_attempt.id
-        )
-    ).first()
-
-    if final_job and final_job.status == "pending":
+    payload_cache = await async_redis_client.get(f"job_payload:{job_id}")
+    if not payload_cache:
         return {
             "status": "processing",
-            "message": "Final interview analysis is processing.",
+            "message": "Job still initializing...",
         }
 
-    if final_job and final_job.status == "failed":
-        return {
-            "status": "failed",
-            "message": "Final interview analysis failed.",
-        }
+    payload = json.loads(payload_cache)
 
-    initial_analysis = initial_attempt.analysis
-    final_analysis = final_attempt.analysis
+    result = await process_job_sync(
+        db=db,
+        job_id=job_id,
+        payload=payload,
+    )
 
-    if not initial_analysis or not final_analysis:
-        raise HTTPException(
-            status_code=404,
-            detail="Interview analysis not found",
-        )
 
-    return build_interview_report(
-        initial_attempt=initial_attempt,
-        final_attempt=final_attempt,
-        initial_analysis=initial_analysis,
-        final_analysis=final_analysis,
-    ) """
 
+    if job.status == "done":
+        cached = await async_redis_client.get(f"session_result:{session_id}")
+        if cached:
+            return json.loads(cached)
+
+    return result
+
+  
+   
 async def submit_final_attempt(
     db: Session,
     attempt_id: int,
@@ -431,55 +367,52 @@ async def submit_final_attempt(
     size_bytes: int,
 ) -> dict[str, Any]:
 
-    job_entry = db.get(Job, attempt_id)
-    if not job_entry:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="job not found"
-        )
-
-    attempt = db.get(Attempt, job_entry.attempt_id)
+    attempt = db.get(Attempt, attempt_id)
     if not attempt:
+        raise HTTPException(404, "Attempt not found")
+
+    if attempt.stage != AttemptStage.INITIAL:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Attempt not found"
+            status_code=400,
+            detail="Final analysis can only be created from initial attempt",
         )
 
-    question = db.exec(select(Question).where(Question.id == attempt.question_id)).one_or_none()
-    if not question:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Question not found"
-        )
+    # create job (DB only metadata)
+    job = Job(
+        status="pending",
+        attempt_id=attempt_id,
+        session_id=attempt.session_id,
+        audio_url=audio_url,
+        duration_seconds=duration_seconds,
+        size_bytes=size_bytes,
+    )
 
-    job_entry = Job(status="pending")
-
-    db.add(job_entry)
+    db.add(job)
     db.commit()
-    db.refresh(job_entry)
+    db.refresh(job)
 
+    # store execution payload in Redis
     payload = {
-        "job_id": job_entry.id,
+        "job_id": job.id,
+        "attempt_id": attempt_id,
+        "session_id": attempt.session_id,
         "user_id": attempt.user_id,
-        "question_id": question.id,
-        "question_title": question.title,
-        "question_description": question.description,
+        "question_id": attempt.question_id,
         "audio_url": audio_url,
         "duration_seconds": duration_seconds,
         "size_bytes": size_bytes,
-        "stage": AttemptStage.FINAL.value,
-        "session_id": attempt.session_id,
     }
 
-     # Pipeline Redis operations
-    pipeline = async_redis_client.pipeline()
-    pipeline.rpush(TRANSCRIPTION, json.dumps(payload))
-    await pipeline.execute()
-    
-        
-    db.commit()
-      
+    await async_redis_client.set(
+        f"job_payload:{job.id}",
+        json.dumps(payload),
+        ex=3600,
+    )
+
     return {
-        "job_id": job_entry.id,
+        "job_id": job.id,
         "session_id": attempt.session_id,
-        "message": "Attempt submitted successfully and is being processed.",
+        "message": "Final attempt submitted successfully.",
     }
 
 

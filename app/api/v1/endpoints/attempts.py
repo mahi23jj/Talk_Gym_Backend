@@ -245,11 +245,12 @@ async def get_attempt_analysis(
     return await get_analysis_result(db=db, job_id=job_id)
 
 
-@router.get("/result/final/{session_id}")
+@router.get("/result/{job_id}/final/{session_id}")
 async def get_final_attempt_by_job_id(
+    job_id: int,
     session_id: int,
     user_id: int = Depends(get_current_user_id),
     db=Depends(get_session),
 ):
 
-    return await get_final_attempt_result(db=db, session_id=session_id)
+    return await get_final_attempt_result(db=db, job_id=job_id, session_id=session_id)

@@ -13,7 +13,8 @@ from app.models.question import Question
 from app.models.training import TrainingAnalysis, TrainingAttempt
 from app.models.enums import TrainingMode
 
-from app.core.redis import async_redis_client, ANALYSIS_QUEUE
+from app.core.redis import async_redis_client
+from app.services.ai_service import mock_ai_beveviral_analysis
 
 import json
 
@@ -23,22 +24,17 @@ async def summit_behevioral_traning(
     user_id: int,
     job_id: int,
     transcript: str,
-
 ) -> dict[str, Any]:
-    # get attemptid from job
 
     job = db.get(Job, job_id)
     if not job:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Job not found"
-        )
+        raise HTTPException(404, "Job not found")
 
     attempt = db.get(Attempt, job.attempt_id)
     if not attempt:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Associated attempt not found"
-        )
+        raise HTTPException(404, "Associated attempt not found")
 
+    # limit attempts
     previous_attempts = db.exec(
         select(TrainingAttempt)
         .where(
@@ -49,89 +45,188 @@ async def summit_behevioral_traning(
     ).all()
 
     if len(previous_attempts) >= 2:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Max behavioral training attempts reached",
-        )
+        raise HTTPException(400, "Max behavioral training attempts reached")
 
-    for existing in previous_attempts:
-        existing_analysis = existing.analysis
-        if existing_analysis and existing_analysis.passed:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Behavioral training already passed for this attempt",
-            )
+    for a in previous_attempts:
+        if a.analysis and a.analysis.passed:
+            raise HTTPException(400, "Already passed behavioral training")
 
-
-
+    # create training attempt
     training_attempt = TrainingAttempt(
         attempt_id=attempt.id,
         training_type=TrainingMode.behavioral_training,
         transcript=transcript,
     )
+
     db.add(training_attempt)
     db.flush()
-   
-    
-    question = db.get(Question, attempt.question_id)
-    question_text = f"{question.title}. {question.description}" if question else "Behavioral training follow-up response"
 
-    job_entry = Job(status="pending")
-
-    db.add(job_entry)
+    job.status = "pending"
+    db.add(job)
     db.commit()
-    
-
-    payload = {
-        "job_id": job_entry.id,
-        "user_id": user_id,
-        "attempt_id": attempt.id,
-        "training_attempt_id": training_attempt.id,
-        "question_id": question.id if question else attempt.question_id,
-        "question_text": question_text,
-        "transcript": transcript,
-    }
-
-    await async_redis_client.rpush(
-        ANALYSIS_QUEUE,
-        json.dumps(payload),
-    )
-
 
     return {
-        "job_id": job_entry.id,
+        "job_id": job.id,
         "training_attempt_id": training_attempt.id,
-        "message": "Behavioral training attempt submitted successfully and is being processed.",
+        "status": "pending",
+        "message": "Behavioral training submitted successfully",
     }
 
+async def process_behavioral_sync(
+    db: Session,
+    job_id: int,
+) -> dict[str, Any]:
 
+    job = db.get(Job, job_id)
+    if not job:
+        raise HTTPException(404, "Job not found")
 
-async def get_behvioral_attempt_result(db: Session, job_id: int) -> dict[str, Any]:
-    job_entry = db.get(Job, job_id)
-    if not job_entry:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Job not found"
+    # cache first
+    cached = await async_redis_client.get(f"behavioral_result:{job_id}")
+    if cached:
+        return {"status": "done", "analysis": json.loads(cached)}
+
+    if not job.attempt_id:
+        return {"status": "pending", "message": "Missing attempt"}
+
+    job.status = "processing"
+    db.add(job)
+    db.commit()
+
+    try:
+        attempt = db.get(Attempt, job.attempt_id)
+        if not attempt:
+            raise ValueError("Attempt not found")
+
+        training_attempt = db.exec(
+            select(TrainingAttempt)
+            .where(
+                TrainingAttempt.attempt_id == attempt.id,
+                TrainingAttempt.training_type == TrainingMode.behavioral_training,
+            )
+            .order_by(TrainingAttempt.created_at.desc())
+        ).first()
+
+        if not training_attempt:
+            raise ValueError("Training attempt not found")
+
+        question = db.get(Question, attempt.question_id)
+        question_text = (
+            f"{question.title}. {question.description}"
+            if question else "Behavioral training"
         )
 
-    if job_entry.status == "pending":
-        return {
-            "status": "pending",
-            "message": "Your attempt is still being processed. Please check back later.",
+        # -------------------------
+        # AI ANALYSIS (SYNC)
+        # -------------------------
+        analysis_payload = mock_ai_beveviral_analysis(
+            transcript=training_attempt.transcript,
+            question=question_text,
+        )
+
+        score = int(round(
+            float(
+                analysis_payload.get(
+                    "overall_Behevioral_score",
+                    analysis_payload.get("overall_score", 0.0),
+                )
+            ) * 10
+        ))
+
+        passed = bool(
+            analysis_payload.get(
+                "pass",
+                analysis_payload.get("passed", score >= 60),
+            )
+        )
+
+        flag = str(analysis_payload.get("flag"))
+        feedback = str(
+            analysis_payload.get(
+                "short_feedback",
+                "Behavioral analysis completed." + (f" Flag: {flag}" if flag else ""),
+            )
+        )
+
+        # -------------------------
+        # SAVE ANALYSIS
+        # -------------------------
+        analysis = TrainingAnalysis(
+            training_attempt_id=training_attempt.id,
+            score=score,
+            passed=passed,
+            feedback=feedback,
+            raw_analysis_json=analysis_payload,
+        )
+
+        db.add(analysis)
+        db.flush()
+
+        # -------------------------
+        # UPDATE JOB
+        # -------------------------
+        job.status = "done"
+        db.add(job)
+        db.commit()
+
+        # -------------------------
+        # CACHE RESULT
+        # -------------------------
+        cache_payload = {
+            "id": analysis.id,
+            "training_attempt_id": training_attempt.id,
+            "score": analysis.score,
+            "passed": analysis.passed,
+            "feedback": analysis.feedback,
+            "raw_analysis_json": analysis.raw_analysis_json,
+            "created_at": analysis.created_at.isoformat(),
         }
-    if job_entry.status == "failed":
+
+        await async_redis_client.set(
+            f"behavioral_result:{job_id}",
+            json.dumps(cache_payload, default=str),
+            ex=3600,
+        )
+
+        return {"status": "done", "analysis": cache_payload}
+
+    except Exception as exc:
+        traceback.print_exc()
+
+        db.rollback()
+
+        job.status = "failed"
+        db.add(job)
+        db.commit()
+
         return {
             "status": "failed",
-            "message": "Processing of your attempt failed. Please try again.",
+            "message": str(exc),
         }
 
-        
+async def get_behvioral_attempt_result(
+    db: Session,
+    job_id: int
+) -> dict[str, Any]:
+
+    job = db.get(Job, job_id)
+    if not job:
+        raise HTTPException(404, "Job not found")
+
+    # failed shortcut
+    if job.status == "failed":
+        return {"status": "failed", "message": "Processing failed"}
+
+    # cache hit
     cached = await async_redis_client.get(f"behavioral_result:{job_id}")
+    if cached:
+        return {"status": "done", "analysis": json.loads(cached)}
 
-    if not cached:
-        return {"status": "processing", "message": "Finalizing analysis..."}
+    # if no attempt linked
+    if not job.attempt_id:
+        return {"status": "pending", "message": "Still initializing"}
 
-    analysis_data = json.loads(cached)
-    return {
-        "status": "done",
-        "analysis": analysis_data,
-    }
+    # 🔥 SYNC TRIGGER (THIS replaces worker)
+    result = await process_behavioral_sync(db, job_id)
+
+    return result

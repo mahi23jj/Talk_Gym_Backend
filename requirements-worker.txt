@@ -7,3 +7,6 @@ redis
 sqlmodel
 psycopg2-binary
 fastapi
+numpy
+librosa
+

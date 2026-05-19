@@ -19,9 +19,9 @@ class Settings:
     secret_key: str = os.getenv("SECRET_KEY")
     algorithm: str = os.getenv("ALGORITHM")
     access_token_expire_minutes: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES"))
-    cloudinary_cloud_name: str = os.getenv("CLOUDINARY_Cloud_name")
-    cloudinary_api_key: str = os.getenv("CLOUDINARY_Api_Key")
-    cloudinary_api_secret: str = os.getenv("CLOUDINARY_Api_Secret")
+    cloudinary_cloud_name: str = os.getenv("CLOUDINARY_CLOUD_NAME")
+    cloudinary_api_key: str = os.getenv("CLOUDINARY_API_KEY")
+    cloudinary_api_secret: str = os.getenv("CLOUDINARY_API_SECRET")
     rate_limit_per_minute: int = int(os.getenv("RATE_LIMIT_PER_MINUTE", "10"))
     rate_limit_per_hour: int = int(os.getenv("RATE_LIMIT_PER_HOUR", "100"))
     max_audio_size_bytes: int = int(

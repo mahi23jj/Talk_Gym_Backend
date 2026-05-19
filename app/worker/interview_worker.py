@@ -34,7 +34,7 @@ from traning_recomendation import select_training_mode
 MAX_CONCURRENT_JOBS = 5
 semaphore = asyncio.Semaphore(MAX_CONCURRENT_JOBS)
 TRANSCRIPTION_TIMEOUT_SECONDS = 300
-VOICE_ANALYSIS_TIMEOUT_SECONDS = 60
+VOICE_ANALYSIS_TIMEOUT_SECONDS = 180
 
 
 async def _extract_voice_features(audio_url: str) -> dict[str, Any] | None:

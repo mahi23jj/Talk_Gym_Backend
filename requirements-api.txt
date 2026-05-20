@@ -18,6 +18,7 @@ groq
 imageio-ffmpeg
 numpy
 librosa
+pysoundfile
 
 
 

@@ -1,6 +1,9 @@
 
 from typing import Any
 
+import json
+import logging
+import traceback
 from sqlmodel import Session, select
 from sqlalchemy.orm import selectinload
 
@@ -16,7 +19,9 @@ from app.models.enums import TrainingMode
 from app.core.redis import async_redis_client
 from app.services.ai_service import mock_ai_beveviral_analysis
 
-import json
+import traceback
+
+logger = logging.getLogger(__name__)
 
 
 async def summit_behevioral_traning(
@@ -43,6 +48,8 @@ async def summit_behevioral_traning(
         )
         .options(selectinload(TrainingAttempt.analysis))
     ).all()
+
+    print(previous_attempts)
 
     if len(previous_attempts) >= 2:
         raise HTTPException(400, "Max behavioral training attempts reached")
@@ -191,9 +198,14 @@ async def process_behavioral_sync(
         return {"status": "done", "analysis": cache_payload}
 
     except Exception as exc:
-        traceback.print_exc()
+
+        error = traceback.format_exc()
+
+        logger.error(error)
 
         db.rollback()
+
+        print(error)
 
         job.status = "failed"
         db.add(job)
@@ -202,6 +214,8 @@ async def process_behavioral_sync(
         return {
             "status": "failed",
             "message": str(exc),
+            "type": type(exc).__name__,
+            "traceback": error,
         }
 
 async def get_behvioral_attempt_result(
@@ -214,17 +228,17 @@ async def get_behvioral_attempt_result(
         raise HTTPException(404, "Job not found")
 
     # failed shortcut
-    if job.status == "failed":
-        return {"status": "failed", "message": "Processing failed"}
+    # if job.status == "failed":
+        # return {"status": "failed", "message": "Processing failed"}
 
     # cache hit
-    cached = await async_redis_client.get(f"behavioral_result:{job_id}")
-    if cached:
-        return {"status": "done", "analysis": json.loads(cached)}
+    # cached = await async_redis_client.get(f"behavioral_result:{job_id}")
+    # if cached:
+        # return {"status": "done", "analysis": json.loads(cached)}
 
     # if no attempt linked
-    if not job.attempt_id:
-        return {"status": "pending", "message": "Still initializing"}
+    # if not job.attempt_id:
+    #     return {"status": "pending", "message": "Still initializing"}
 
     # 🔥 SYNC TRIGGER (THIS replaces worker)
     result = await process_behavioral_sync(db, job_id)

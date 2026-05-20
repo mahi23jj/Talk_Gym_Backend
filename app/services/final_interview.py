@@ -12,7 +12,7 @@ from app.models.enums import AttemptStage
 from app.models.interview import Attempt, InterviewAnalysis, InterviewSession
 from app.models.job import Job
 from app.models.question import Question
-from app.services.interview import process_job_sync
+# Import `process_job_sync` locally inside functions to avoid circular imports
 
 
 # =========================================================
@@ -342,9 +342,12 @@ async def get_session_result(
 
     payload = json.loads(payload_cache)
 
+    # Import here to avoid circular import at module load time
+    from app.services.interview import process_job_sync
+
     result = await process_job_sync(
         db=db,
-        job_id=job_id,
+        job_id=job.id,
         payload=payload,
     )
 

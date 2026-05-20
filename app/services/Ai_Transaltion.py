@@ -160,7 +160,6 @@ import tempfile
 from typing import Any, Dict, List, Optional
 
 from fastapi import UploadFile
-from faster_whisper import WhisperModel
 from imageio_ffmpeg import get_ffmpeg_exe
 
 
@@ -172,14 +171,22 @@ os.environ["FFMPEG_BINARY"] = ffmpeg_exe
 
 WHISPER_MODEL = os.getenv("WHISPER_MODEL", "tiny")
 
-_model: Optional[WhisperModel] = None
+_model: Optional[Any] = None
 
 
-def _get_model() -> WhisperModel:
+def _get_model() -> Any:
     global _model
 
     if _model is None:
         print(f"Loading Faster-Whisper model: {WHISPER_MODEL}")
+
+        try:
+            from faster_whisper import WhisperModel
+        except ImportError as exc:
+            raise RuntimeError(
+                "faster-whisper is not installed in this environment. "
+                "Install it in the API environment before transcribing audio."
+            ) from exc
 
         _model = WhisperModel(
             WHISPER_MODEL,

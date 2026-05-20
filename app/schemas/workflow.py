@@ -52,6 +52,7 @@ class InterviewAnalysisRead(BaseModel):
     score: int
     feedback: str
     raw_analysis_json: dict[str, Any]
+    voice_metrics: dict[str, Any] | None = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

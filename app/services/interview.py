@@ -356,19 +356,12 @@ async def process_job_sync(
 
             local_audio = payload["local_audio"]
 
-            transcript_items, voice_features = await asyncio.gather(
-                asyncio.to_thread(
-                    transcribe_audio_path,
-                    local_audio,
-                ),
-                asyncio.to_thread(
-                    extract_voice_features,
-                    local_audio,
-                )
+            transcript_items = await asyncio.to_thread(
+                transcribe_audio_path,
+                local_audio,
             )
 
             payload["transcript_items"] = transcript_items
-            payload["voice_features"] = voice_features
             payload["step"] = 3
 
             await async_redis_client.set(
@@ -377,16 +370,36 @@ async def process_job_sync(
                 ex=3600,
             )
 
-            return {
-                "status": "processing",
-                "message": "Transcript ready"
-            }
+            return {"status": "processing", "message": "Transcript ready"}
+    
+        
+
+        if step == 3:
+
+            local_audio = payload["local_audio"]
+
+            voice_features = await asyncio.to_thread(
+                extract_voice_features,
+                local_audio,   # ✅ LOCAL PATH ONLY
+            )
+
+            payload["voice_features"] = voice_features
+            payload["step"] = 4
+
+            await async_redis_client.set(
+                f"job_payload:{job_id}",
+                json.dumps(payload),
+                ex=3600,
+            )
+
+            return {"status": "processing", "message": "Voice analysis ready"}
+
 
         # -------------------------
-        # STEP 3
+        # STEP 4
         # AI + save
         # -------------------------
-        if step == 3:
+        if step == 4:
 
             question = db.get(
                 Question,

@@ -466,10 +466,10 @@ def extract_voice_features(audio_url: str) -> dict[str, Any]:
         logger.info("Starting voice analysis: %s", audio_url)
 
         # 1. download
-        tmp_file = _download_to_temp(audio_url)
+        # tmp_file = _download_to_temp(audio_url)
 
         # 2. convert
-        wav_file = _convert_to_wav(tmp_file)
+        wav_file = _convert_to_wav(audio_url)
 
         # 3. load
         y, sr = _load_audio(wav_file)

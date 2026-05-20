@@ -330,32 +330,7 @@ def run_ai_analysis(transcript: Any, question: str) -> dict[str, Any]:
         transcript=transcript, question=question
     )
 
-    formatted = _format_for_prompt(transcript_sentences)
-
-    return {
-            "overall_score": fallback["overall_score"],
-            "transcript": transcript_text,
-            "transcript_sentences": formatted ,
-            "content": {
-                "relevance": fallback["scores"]["relevance"],
-                "clarity": fallback["scores"]["clarity"],
-                "structure_star": fallback["scores"]["structure"],
-                "specificity": fallback["scores"]["specificity"],
-            },
-            "behavioral": {
-                "ownership": fallback["scores"]["ownership"],
-                "initiative": fallback["scores"]["initiative"],
-                "impact": fallback["scores"]["impact"],
-            },
-            "flags":("flags", fallback["flags"]),
-            "sentence_feedback": ("sentence_feedback", fallback["sentence_feedback"]),
-            "behavioral_questions": ("behavioral_questions", fallback["followup_questions"]),
-            "star_example": ("star_example", fallback["star_example"]),
-            "primary_training_mode": ("primary_training_mode", fallback["primary_training_mode"]),
-            "short_feedback": ("short_feedback", fallback["feedback"]),
-        }
-
-    """  try:
+    try:
 
         formatted = _format_for_prompt(transcript_sentences)
 
@@ -394,7 +369,7 @@ def run_ai_analysis(transcript: Any, question: str) -> dict[str, Any]:
 
         logger.exception("Groq failed — fallback used")
 
-        return {
+        """  return {
             "overall_score": fallback["overall_score"],
             "transcript": transcript_text,
             "transcript_sentences": transcript_sentences,
@@ -415,8 +390,8 @@ def run_ai_analysis(transcript: Any, question: str) -> dict[str, Any]:
             "star_example": ai.get("star_example", fallback["star_example"]),
             "primary_training_mode": ai.get("primary_training_mode", fallback["primary_training_mode"]),
             "short_feedback": ai.get("short_feedback", fallback["feedback"]),
-        }
- """
+        } """
+
 
 def mock_ai_analysis(transcript: Any, question: str) -> dict[str, Any]:
     return run_ai_analysis(transcript, question)

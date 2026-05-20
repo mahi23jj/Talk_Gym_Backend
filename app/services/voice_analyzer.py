@@ -312,8 +312,6 @@ import requests
 import os
 from urllib.parse import urlparse
 
-
-
 logger = logging.getLogger(__name__)
 
 
@@ -351,8 +349,6 @@ class VoiceMetrics(TypedDict):
     pitch: PitchMetrics
 
 
-
-
 # =========================
 # UTIL
 # =========================
@@ -375,13 +371,43 @@ def _word_count(text: str) -> int:
 # =========================
 # STEP 1: DOWNLOAD (CLOUDINARY SAFE)
 # =========================
-def _download_to_temp(url: str) -> str:
-    logger.info("Downloading media: %s", url)
+# def _download_to_temp(url: str) -> str:
+#     logger.info("Downloading media: %s", url)
 
-    r = requests.get(url, stream=True, timeout=60)
+#     r = requests.get(url, stream=True, timeout=60)
+#     r.raise_for_status()
+
+#     suffix = os.path.splitext(urlparse(url).path)[1] or ".mp4"
+
+#     tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+#     try:
+#         for chunk in r.iter_content(chunk_size=1024 * 1024):
+#             if chunk:
+#                 tmp.write(chunk)
+#     finally:
+#         tmp.close()
+
+
+#     return tmp.name
+def _download_to_temp(url_or_path: str) -> str:
+    # Already a local file — skip download entirely
+    if os.path.isfile(url_or_path):
+        logger.info("Using local file directly: %s", url_or_path)
+        return url_or_path
+
+    if not url_or_path.startswith(("http://", "https://")):
+        raise ValueError(f"Not a valid URL or existing local path: {url_or_path!r}")
+
+    logger.info("Downloading media: %s", url_or_path)
+    r = requests.get(
+        url_or_path,
+        stream=True,
+        timeout=60,
+        headers={"User-Agent": "Mozilla/5.0"},
+    )
     r.raise_for_status()
 
-    suffix = os.path.splitext(urlparse(url).path)[1] or ".mp4"
+    suffix = os.path.splitext(urlparse(url_or_path).path)[1] or ".mp4"
 
     tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
     try:
@@ -414,7 +440,9 @@ def _convert_to_wav(input_path: str) -> str:
 
     logger.info("Converting to WAV via FFmpeg...")
 
-    subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+    subprocess.run(
+        cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True
+    )
 
     return wav_path
 
@@ -493,7 +521,9 @@ def extract_voice_features(audio_url: str) -> dict[str, Any]:
             "pitch": {
                 "mean": pitch_mean,
                 "variance": pitch_var,
-                "monotony_score": float(max(0, 10 - np.std(pitch) if len(pitch) else 5)),
+                "monotony_score": float(
+                    max(0, 10 - np.std(pitch) if len(pitch) else 5)
+                ),
             },
         }
 
@@ -513,7 +543,6 @@ def extract_voice_features(audio_url: str) -> dict[str, Any]:
 # =========================
 # STEP 5: SAFE METRICS BUILDER
 # =========================
-
 
 
 def _label_score(score: float) -> str:
@@ -583,10 +612,7 @@ def build_voice_metrics(
 
     nervousness = min(
         10,
-        1.5
-        + avg_pause * 2
-        + long_pauses * 0.5
-        + silence_ratio * 3,
+        1.5 + avg_pause * 2 + long_pauses * 0.5 + silence_ratio * 3,
     )
 
     confidence = max(0, 10 - nervousness)
@@ -602,31 +628,26 @@ def build_voice_metrics(
             "score": round(confidence, 1),
             "level": _label_score(confidence),
         },
-
         "delivery": {
             "speech_rate_wps": round(speech_rate, 2),
             "pace": pace_label,
             "tip": pace_tip,
         },
-
         "nervousness": {
             "score": round(nervousness, 1),
             "level": nerve_label,
             "tip": nerve_tip,
         },
-
         "voice_tone": {
             "variation_score": round(monotony_score, 1),
             "level": pitch_label,
             "tip": pitch_tip,
         },
-
         "pausing": {
             "average_pause_seconds": round(avg_pause, 2),
             "long_pauses": long_pauses,
             "silence_percent": round(silence_ratio * 100, 1),
         },
-
         "summary": (
             f"{_label_score(confidence)} confidence, "
             f"{pace_label.lower()}, "

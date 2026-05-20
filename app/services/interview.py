@@ -374,32 +374,32 @@ async def process_job_sync(
     
         
 
-        if step == 3:
+        # if step == 3:
 
-            local_audio = payload["local_audio"]
+        #     local_audio = payload["local_audio"]
 
-            voice_features = await asyncio.to_thread(
-                extract_voice_features,
-                local_audio,   # ✅ LOCAL PATH ONLY
-            )
+        #     voice_features = await asyncio.to_thread(
+        #         extract_voice_features,
+        #         local_audio,   # ✅ LOCAL PATH ONLY
+        #     )
 
-            payload["voice_features"] = voice_features
-            payload["step"] = 4
+        #     payload["voice_features"] = voice_features
+        #     payload["step"] = 4
 
-            await async_redis_client.set(
-                f"job_payload:{job_id}",
-                json.dumps(payload),
-                ex=3600,
-            )
+        #     await async_redis_client.set(
+        #         f"job_payload:{job_id}",
+        #         json.dumps(payload),
+        #         ex=3600,
+        #     )
 
-            return {"status": "processing", "message": "Voice analysis ready"}
+        #     return {"status": "processing", "message": "Voice analysis ready"}
 
 
         # -------------------------
         # STEP 4
         # AI + save
         # -------------------------
-        if step == 4:
+        if step == 3:
 
             question = db.get(
                 Question,
@@ -411,13 +411,13 @@ async def process_job_sync(
                 question=f"{question.title}. {question.description}",
             )
 
-            voice_metrics = build_voice_metrics(
+            """            voice_metrics = build_voice_metrics(
                 raw_features=payload["voice_features"],
                 transcript=payload["transcript_items"],
                 duration_seconds=payload["duration_seconds"],
             )
 
-            analysis_payload["voice_metrics"] = voice_metrics
+            analysis_payload["voice_metrics"] = voice_metrics """
 
             recording = Recording(
                 user_id=payload["user_id"],
@@ -474,8 +474,8 @@ async def process_job_sync(
             result = {
                 "attempt_id": attempt.id,
                 "analysis": _build_attempt_analysis_response(
-                    analysis,
-                    voice_metrics=voice_metrics,
+                    analysis
+                    # voice_metrics=voice_metrics,
                 ),
             }
 

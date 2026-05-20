@@ -320,7 +320,7 @@ logger = logging.getLogger(__name__)
 # =========================
 # CONFIG
 # =========================
-TARGET_SAMPLE_RATE = 16000
+TARGET_SAMPLE_RATE = 8000
 PAUSE_TOP_DB = 30
 LONG_PAUSE_THRESHOLD_SECONDS = 0.6
 IDEAL_SPEECH_RATE = 1.8
@@ -349,6 +349,8 @@ class VoiceMetrics(TypedDict):
     nervousness: float
     pauses: PauseMetrics
     pitch: PitchMetrics
+
+
 
 
 # =========================
@@ -412,7 +414,7 @@ def _convert_to_wav(input_path: str) -> str:
 
     logger.info("Converting to WAV via FFmpeg...")
 
-    subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+    subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
 
     return wav_path
 
@@ -469,7 +471,8 @@ def extract_voice_features(audio_url: str) -> dict[str, Any]:
 
         # ❗ FIXED: NO fill_na in modern librosa
         try:
-            pitch = librosa.yin(y, fmin=75, fmax=300, sr=sr)
+            # pitch = librosa.yin(y, fmin=75, fmax=300, sr=sr)
+            pitch = librosa.feature.spectral_centroid(y=y, sr=sr)[0]
             pitch = pitch[np.isfinite(pitch)]
         except Exception:
             pitch = np.array([])

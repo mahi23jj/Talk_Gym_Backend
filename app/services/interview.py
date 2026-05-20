@@ -22,7 +22,7 @@ from app.core.redis import async_redis_client
 from app.services.Ai_Transaltion import transcribe_audio_path
 from app.services.ai_service import ai_analysis_async, mock_ai_analysis
 from app.services.final_interview import build_interview_report
-from app.services.voice_analyzer import build_voice_metrics, extract_voice_features
+from app.services.voice_analyzer import _download_to_temp, build_voice_metrics, extract_voice_features
 from traning_recomendation import select_training_mode
 
 
@@ -125,11 +125,13 @@ async def process_job_sync(
         if not question:
             raise ValueError("Question not found")
 
+        local_audio = await asyncio.to_thread(_download_to_temp, audio_url)
+        
         # -------------------------
         # PARALLEL PROCESSING
         # -------------------------
         transcription_task = asyncio.create_task(
-            asyncio.to_thread(transcribe_audio_path, audio_url)
+            asyncio.to_thread(transcribe_audio_path, local_audio)
         )
 
         voice_task = asyncio.create_task(

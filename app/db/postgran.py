@@ -8,7 +8,24 @@ from typing import Annotated, Optional
 from app.core.config import settings
 
 
-engine = create_engine(settings.postgres_url, pool_size=20,max_overflow= 30 , pool_pre_ping=True)
+
+
+engine = create_engine(
+    settings.postgres_url,
+
+    pool_size=5,
+    max_overflow=10,
+
+    pool_pre_ping=True,
+    pool_recycle=180,
+
+    pool_timeout=30,
+
+    connect_args={
+        "sslmode": "require",
+        "connect_timeout": 15,
+    },
+)
 
 def get_session() -> Session: # type: ignore
     """Get a new database session."""

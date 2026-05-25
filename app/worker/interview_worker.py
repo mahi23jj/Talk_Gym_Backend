@@ -37,6 +37,33 @@ TRANSCRIPTION_TIMEOUT_SECONDS = 300
 VOICE_ANALYSIS_TIMEOUT_SECONDS = 180
 
 
+def _fallback_voice_metrics() -> dict[str, Any]:
+    return {
+        "confidence": {"score": 0.0, "level": "Needs Improvement"},
+        "delivery": {
+            "speech_rate_wps": 0.0,
+            "pace": "Too Slow",
+            "tip": "Try speaking a little faster to sound more natural.",
+        },
+        "nervousness": {
+            "score": 0.0,
+            "level": "Calm",
+            "tip": "You sound relaxed and controlled.",
+        },
+        "voice_tone": {
+            "variation_score": 0.0,
+            "level": "Monotone",
+            "tip": "Your voice lacks variation.",
+        },
+        "pausing": {
+            "average_pause_seconds": 0.0,
+            "long_pauses": 0,
+            "silence_percent": 0.0,
+        },
+        "summary": "Needs improvement confidence, too slow, monotone, calm.",
+    }
+
+
 async def _extract_voice_features(audio_url: str) -> dict[str, Any] | None:
 
     try:
@@ -122,7 +149,7 @@ async def process_job(payload: dict):
                     question=f"{question.title}. {question.description}",
                 )
 
-                voice_metrics = None
+                voice_metrics = _fallback_voice_metrics()
                 voice_features = await voice_analysis_task
 
                 if voice_features is not None:
@@ -138,8 +165,6 @@ async def process_job(payload: dict):
                     except Exception:
 
                         traceback.print_exc()
-
-                        voice_metrics = None
 
                 analysis_payload["voice_metrics"] = voice_metrics
 

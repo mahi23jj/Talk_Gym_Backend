@@ -364,13 +364,15 @@ async def get_session_result(
    
 async def submit_final_attempt(
     db: Session,
-    attempt_id: int,
+    job_id: int,
     audio_url: str,
     duration_seconds: int,
     size_bytes: int,
 ) -> dict[str, Any]:
+    
+    job = db.get(Job, job_id)
 
-    attempt = db.get(Attempt, attempt_id)
+    attempt = db.get(Attempt, job.attempt_id)
     if not attempt:
         raise HTTPException(404, "Attempt not found")
 
@@ -383,7 +385,7 @@ async def submit_final_attempt(
     # create job (DB only metadata)
     job = Job(
         status="pending",
-        attempt_id=attempt_id,
+        attempt_id=attempt.id,
         session_id=attempt.session_id,
         audio_url=audio_url,
         duration_seconds=duration_seconds,
@@ -397,7 +399,7 @@ async def submit_final_attempt(
     # store execution payload in Redis
     payload = {
         "job_id": job.id,
-        "attempt_id": attempt_id,
+        "attempt_id": attempt.id,
         "session_id": attempt.session_id,
         "user_id": attempt.user_id,
         "question_id": attempt.question_id,

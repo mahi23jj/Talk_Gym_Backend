@@ -22,9 +22,12 @@ from app.core.redis import async_redis_client
 from app.services.Ai_Transaltion import transcribe_audio_path
 from app.services.ai_service import ai_analysis_async, mock_ai_analysis
 from app.services.final_interview import build_interview_report
-from app.services.voice_analyzer import _download_to_temp, build_voice_metrics, extract_voice_features
+from app.services.voice_analyzer import (
+    _download_to_temp,
+    build_voice_metrics,
+    extract_voice_features,
+)
 from traning_recomendation import select_training_mode
-
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +38,7 @@ VOICE_ANALYSIS_TIMEOUT_SECONDS = 180
 # ---------------------------
 # Helpers
 # ---------------------------
+
 
 async def _extract_voice_features(audio_url: str) -> dict[str, Any] | None:
     try:
@@ -63,7 +67,11 @@ def _build_attempt_analysis_response(
         "score": analysis_row.score,
         "feedback": analysis_row.feedback,
         "raw_analysis_json": raw_analysis,
-        "voice_metrics": voice_metrics if voice_metrics is not None else raw_analysis.get("voice_metrics"),
+        "voice_metrics": (
+            voice_metrics
+            if voice_metrics is not None
+            else raw_analysis.get("voice_metrics")
+        ),
         "created_at": analysis_row.created_at,
     }
 
@@ -84,6 +92,33 @@ def _build_cached_analysis_response(
         "raw_analysis_json": data.get("raw_analysis_json", {}),
         "voice_metrics": data.get("voice_metrics"),
         "created_at": created_at,
+    }
+
+
+def _fallback_voice_metrics() -> dict[str, Any]:
+    return {
+        "confidence": {"score": 0.0, "level": "Needs Improvement"},
+        "delivery": {
+            "speech_rate_wps": 0.0,
+            "pace": "Too Slow",
+            "tip": "Try speaking a little faster to sound more natural.",
+        },
+        "nervousness": {
+            "score": 0.0,
+            "level": "Calm",
+            "tip": "You sound relaxed and controlled.",
+        },
+        "voice_tone": {
+            "variation_score": 0.0,
+            "level": "Monotone",
+            "tip": "Your voice lacks variation.",
+        },
+        "pausing": {
+            "average_pause_seconds": 0.0,
+            "long_pauses": 0,
+            "silence_percent": 0.0,
+        },
+        "summary": "Needs improvement confidence, too slow, monotone, calm.",
     }
 
 
@@ -126,7 +161,7 @@ def _build_cached_analysis_response(
 #             raise ValueError("Question not found")
 
 #         local_audio = await asyncio.to_thread(_download_to_temp, audio_url)
-        
+
 #         # -------------------------
 #         # PARALLEL PROCESSING
 #         # -------------------------
@@ -156,7 +191,7 @@ def _build_cached_analysis_response(
 #             question=f"{question.title}. {question.description}",
 #             )
 #         )
-     
+
 
 #         voice_features, analysis_payload = await asyncio.gather(
 #             voice_task,
@@ -310,25 +345,220 @@ def _build_cached_analysis_response(
 #         raise HTTPException(500, "Processing failed")
 
 
+# async def process_job_sync(
+#     db: Session,
+#     job_id: int,
+#     payload: dict,
+# ) -> dict[str, Any]:
+
+#     job = db.get(Job, job_id)
+#     if not job:
+#         raise HTTPException(404, "Job not found")
+
+#     try:
+#         step = payload.get("step", 1)
+
+#         # -------------------------
+#         # STEP 1
+#         # download + convert
+#         # -------------------------
+#         if step == 1:
+
+#             local_audio = await asyncio.to_thread(
+#                 _download_to_temp,
+#                 payload["audio_url"],
+#             )
+
+#             payload["local_audio"] = local_audio
+#             payload["step"] = 2
+
+#             await async_redis_client.set(
+#                 f"job_payload:{job_id}",
+#                 json.dumps(payload),
+#                 ex=3600,
+#             )
+
+#             return {
+#                 "status": "processing",
+#                 "message": "Audio prepared"
+#             }
+
+#         # -------------------------
+#         # STEP 2
+#         # transcription + voice
+#         # -------------------------
+#         if step == 2:
+
+#             local_audio = payload["local_audio"]
+
+#             transcript_items = await asyncio.to_thread(
+#                 transcribe_audio_path,
+#                 local_audio,
+#             )
+
+#             payload["transcript_items"] = transcript_items
+#             payload["step"] = 3
+
+#             await async_redis_client.set(
+#                 f"job_payload:{job_id}",
+#                 json.dumps(payload),
+#                 ex=3600,
+#             )
+
+#             return {"status": "processing", "message": "Transcript ready"}
+
+
+#         # if step == 3:
+
+#         #     local_audio = payload["local_audio"]
+
+#         #     voice_features = await asyncio.to_thread(
+#         #         extract_voice_features,
+#         #         local_audio,   # ✅ LOCAL PATH ONLY
+#         #     )
+
+#         #     payload["voice_features"] = voice_features
+#         #     payload["step"] = 4
+
+#         #     await async_redis_client.set(
+#         #         f"job_payload:{job_id}",
+#         #         json.dumps(payload),
+#         #         ex=3600,
+#         #     )
+
+#         #     return {"status": "processing", "message": "Voice analysis ready"}
+
+
+#         # -------------------------
+#         # STEP 4
+#         # AI + save
+#         # -------------------------
+#         if step == 3:
+
+#             question = db.get(
+#                 Question,
+#                 payload["question_id"],
+#             )
+
+#             analysis_payload = await ai_analysis_async(
+#                 transcript=payload["transcript_items"],
+#                 question=f"{question.title}. {question.description}",
+#             )
+
+#             """            voice_metrics = build_voice_metrics(
+#                 raw_features=payload["voice_features"],
+#                 transcript=payload["transcript_items"],
+#                 duration_seconds=payload["duration_seconds"],
+#             )
+
+#             analysis_payload["voice_metrics"] = voice_metrics """
+
+#             recording = Recording(
+#                 user_id=payload["user_id"],
+#                 question_id=payload["question_id"],
+#                 audio_url=payload["audio_url"],
+#                 duration_seconds=payload["duration_seconds"],
+#                 size_bytes=payload["size_bytes"],
+#                 transcription=" ".join(
+#                     x["sentence"]
+#                     for x in payload["transcript_items"]
+#                 ),
+#             )
+
+#             db.add(recording)
+#             db.flush()
+
+#             attempt = Attempt(
+#                 user_id=payload["user_id"],
+#                 question_id=payload["question_id"],
+#                 recording_id=recording.id,
+#                 transcript=recording.transcription,
+#                 session_id=payload["session_id"],
+#                 stage=AttemptStage.INITIAL,
+#             )
+
+#             db.add(attempt)
+#             db.flush()
+
+#             analysis = InterviewAnalysis(
+#                 attempt_id=attempt.id,
+#                 score=int(
+#                     round(
+#                         float(
+#                             analysis_payload.get(
+#                                 "overall_score",
+#                                 0
+#                             )
+#                         ) * 10
+#                     )
+#                 ),
+#                 feedback="Analysis completed",
+#                 raw_analysis_json=analysis_payload,
+#             )
+
+#             db.add(analysis)
+#             db.flush()
+
+#             job.status = "done"
+#             job.attempt_id = attempt.id
+
+#             db.add(job)
+#             db.commit()
+
+#             result = {
+#                 "attempt_id": attempt.id,
+#                 "analysis": _build_attempt_analysis_response(
+#                     analysis
+#                     # voice_metrics=voice_metrics,
+#                 ),
+#             }
+
+#             await async_redis_client.set(
+#                 f"attempt_result:{job_id}",
+#                 json.dumps(result, default=str),
+#                 ex=3600,
+#             )
+
+#             return {
+#                 "status": "done",
+#                 "analysis": result["analysis"],
+#             }
+
+#     except Exception:
+#         logger.error(traceback.format_exc())
+
+#         db.rollback()
+
+#         job.status = "failed"
+#         db.add(job)
+#         db.commit()
+
+#         raise HTTPException(500, "Processing failed")
+
+
 async def process_job_sync(
     db: Session,
     job_id: int,
-    payload: dict,
+    payload: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
 
     job = db.get(Job, job_id)
     if not job:
         raise HTTPException(404, "Job not found")
 
-    try:
-        step = payload.get("step", 1)
+    if payload is None:
+        payload_raw = await async_redis_client.get(f"job_payload:{job_id}")
+        if not payload_raw:
+            return {"status": "processing", "message": "No payload yet"}
 
+        payload = json.loads(payload_raw)
+    step = payload.get("step", 1)
+
+    try:
         # -------------------------
-        # STEP 1
-        # download + convert
+        # STEP 1: DOWNLOAD
         # -------------------------
         if step == 1:
-
             local_audio = await asyncio.to_thread(
                 _download_to_temp,
                 payload["audio_url"],
@@ -343,22 +573,15 @@ async def process_job_sync(
                 ex=3600,
             )
 
-            return {
-                "status": "processing",
-                "message": "Audio prepared"
-            }
+            return {"status": "processing", "step": 1}
 
         # -------------------------
-        # STEP 2
-        # transcription + voice
+        # STEP 2: TRANSCRIBE
         # -------------------------
         if step == 2:
-
-            local_audio = payload["local_audio"]
-
             transcript_items = await asyncio.to_thread(
                 transcribe_audio_path,
-                local_audio,
+                payload["local_audio"],
             )
 
             payload["transcript_items"] = transcript_items
@@ -370,54 +593,63 @@ async def process_job_sync(
                 ex=3600,
             )
 
-            return {"status": "processing", "message": "Transcript ready"}
-    
-        
-
-        # if step == 3:
-
-        #     local_audio = payload["local_audio"]
-
-        #     voice_features = await asyncio.to_thread(
-        #         extract_voice_features,
-        #         local_audio,   # ✅ LOCAL PATH ONLY
-        #     )
-
-        #     payload["voice_features"] = voice_features
-        #     payload["step"] = 4
-
-        #     await async_redis_client.set(
-        #         f"job_payload:{job_id}",
-        #         json.dumps(payload),
-        #         ex=3600,
-        #     )
-
-        #     return {"status": "processing", "message": "Voice analysis ready"}
+            return {"status": "processing", "step": 2}
 
 
-        # -------------------------
-        # STEP 4
-        # AI + save
-        # -------------------------
         if step == 3:
 
-            question = db.get(
-                Question,
-                payload["question_id"],
+            local_audio = payload["local_audio"]
+
+            voice_features = await asyncio.to_thread(
+                extract_voice_features,
+                local_audio,   # ✅ LOCAL PATH ONLY
             )
+
+            payload["voice_features"] = voice_features
+            payload["step"] = 4
+
+            await async_redis_client.set(
+                f"job_payload:{job_id}",
+                json.dumps(payload),
+                ex=3600,
+            )
+
+            return {"status": "processing", "message": "Voice analysis ready"}
+
+
+        # -------------------------
+        # STEP 3: AI ANALYSIS + SAVE
+        # -------------------------
+        if step == 4:
+
+            question = db.get(Question, payload["question_id"])
 
             analysis_payload = await ai_analysis_async(
                 transcript=payload["transcript_items"],
                 question=f"{question.title}. {question.description}",
             )
 
-            """            voice_metrics = build_voice_metrics(
-                raw_features=payload["voice_features"],
-                transcript=payload["transcript_items"],
-                duration_seconds=payload["duration_seconds"],
-            )
+            voice_metrics = _fallback_voice_metrics()
+            try:
+                voice_features = payload.get("voice_features")
+                if isinstance(voice_features, dict):
+                    voice_metrics = build_voice_metrics(
+                        raw_features=voice_features,
+                        transcript=payload.get("transcript_items"),
+                        duration_seconds=payload.get("duration_seconds"),
+                    )
+                else:
+                    logger.warning(
+                        "Missing voice_features in payload for job_id=%s; using fallback metrics",
+                        job_id,
+                    )
+            except Exception:
+                logger.exception(
+                    "Failed to build voice metrics for job_id=%s; using fallback metrics",
+                    job_id,
+                )
 
-            analysis_payload["voice_metrics"] = voice_metrics """
+            analysis_payload["voice_metrics"] = voice_metrics
 
             recording = Recording(
                 user_id=payload["user_id"],
@@ -426,8 +658,7 @@ async def process_job_sync(
                 duration_seconds=payload["duration_seconds"],
                 size_bytes=payload["size_bytes"],
                 transcription=" ".join(
-                    x["sentence"]
-                    for x in payload["transcript_items"]
+                    x["sentence"] for x in payload["transcript_items"]
                 ),
             )
 
@@ -448,22 +679,12 @@ async def process_job_sync(
 
             analysis = InterviewAnalysis(
                 attempt_id=attempt.id,
-                score=int(
-                    round(
-                        float(
-                            analysis_payload.get(
-                                "overall_score",
-                                0
-                            )
-                        ) * 10
-                    )
-                ),
+                score=int(round(float(analysis_payload.get("overall_score", 0)) * 10)),
                 feedback="Analysis completed",
                 raw_analysis_json=analysis_payload,
             )
 
             db.add(analysis)
-            db.flush()
 
             job.status = "done"
             job.attempt_id = attempt.id
@@ -474,8 +695,8 @@ async def process_job_sync(
             result = {
                 "attempt_id": attempt.id,
                 "analysis": _build_attempt_analysis_response(
-                    analysis
-                    # voice_metrics=voice_metrics,
+                    analysis,
+                    voice_metrics=voice_metrics,
                 ),
             }
 
@@ -492,7 +713,6 @@ async def process_job_sync(
 
     except Exception:
         logger.error(traceback.format_exc())
-
         db.rollback()
 
         job.status = "failed"
@@ -501,9 +721,13 @@ async def process_job_sync(
 
         raise HTTPException(500, "Processing failed")
 
+    return {"status": "processing"}
+
+
 # ---------------------------
 # SUBMIT JOB
 # ---------------------------
+
 
 async def submit_normal_attempt(
     db: Session,
@@ -543,10 +767,7 @@ async def submit_normal_attempt(
             ex=3600,
         )
 
-        return {
-            "job_id": job.id,
-            "message": "Attempt submitted successfully."
-        }
+        return {"job_id": job.id, "message": "Attempt submitted successfully."}
 
     except Exception as exc:
         db.rollback()
@@ -560,52 +781,81 @@ async def submit_normal_attempt(
 # GET RESULT (POLLING)
 # ---------------------------
 
-async def get_attempt_result(
-    db: Session,
-    job_id: int,
-):
+
+async def get_attempt_result(db: Session, job_id: int):
 
     job = db.get(Job, job_id)
-
     if not job:
-        raise HTTPException(404)
+        raise HTTPException(404, "Job not found")
 
+    # -----------------------------
+    # FAILED
+    # -----------------------------
+    if job.status == "failed":
+        return {"status": "failed", "message": "Processing failed"}
+
+    # -----------------------------
+    # DONE → ALWAYS VERIFY DB FIRST
+    # -----------------------------
     if job.status == "done":
 
-        cached = await async_redis_client.get(
-            f"attempt_result:{job_id}"
-        )
+        analysis_row = db.exec(
+            select(InterviewAnalysis).where(
+                InterviewAnalysis.attempt_id == job.attempt_id
+            )
+        ).first()
 
-        return {
+        # 🔥 IMPORTANT: if DB not ready yet, do NOT lie to frontend
+        if not analysis_row:
+            return {"status": "processing", "message": "Finalizing analysis..."}
+
+        # Optional Redis cache (safe fallback only)
+        cached = await async_redis_client.get(f"attempt_result:{job_id}")
+
+        if cached:
+            try:
+                cached_data = json.loads(cached)
+                if cached_data and "analysis" in cached_data:
+                    return cached_data
+            except Exception:
+                pass  # ignore broken cache
+
+        # Build fresh response from DB (SOURCE OF TRUTH)
+        analysis_payload = _build_attempt_analysis_response(analysis_row)
+
+        response = {
             "status": "done",
-            "analysis": json.loads(cached)["analysis"]
+            "analysis": analysis_payload,
         }
 
-    if job.status == "failed":
-        return {
-            "status": "failed"
-        }
+        # Update cache safely (best effort)
+        try:
+            await async_redis_client.set(
+                f"attempt_result:{job_id}",
+                json.dumps(response, default=str),
+                ex=3600,
+            )
+        except Exception:
+            pass
 
-    payload = await async_redis_client.get(
-        f"job_payload:{job_id}"
-    )
+        return response
 
-    if payload:
+    # -----------------------------
+    # PROCESSING → advance pipeline
+    # -----------------------------
+    payload_raw = await async_redis_client.get(f"job_payload:{job_id}")
 
-        return await process_job_sync(
-            db,
-            job_id,
-            json.loads(payload),
-        )
+    if payload_raw:
+        payload = json.loads(payload_raw)
+        return await process_job_sync(db, job_id, payload)
 
-    return {
-        "status": "processing"
-    }
+    return {"status": "processing", "message": "Still processing..."}
 
 
 # ---------------------------
 # OPTIONAL CLEAN RESULT FETCH
 # ---------------------------
+
 
 async def get_analysis_result(db: Session, job_id: int) -> dict[str, Any]:
 

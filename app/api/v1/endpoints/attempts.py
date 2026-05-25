@@ -208,7 +208,7 @@ async def submit_final_attempt_route(
 
     return await submit_final_attempt(
         db=db,
-        attempt_id=attempt_id,
+        job_id=attempt_id,
         audio_url=data.audio_url,
         duration_seconds=data.duration_seconds,
         size_bytes=data.size_bytes,

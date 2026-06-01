@@ -324,88 +324,172 @@ async def get_session_result(
     session_id: int,
     job_id: int,
 ) -> dict[str, Any]:
-    
+
     job = db.get(Job, job_id)
+
     if not job:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+            status_code=404,
             detail="Job not found",
         )
-    
 
-    payload_cache = await async_redis_client.get(f"job_payload:{job_id}")
-    if not payload_cache:
-        return {
-            "status": "processing",
-            "message": "Job still initializing...",
-        }
-
-    payload = json.loads(payload_cache)
-
-    # Import here to avoid circular import at module load time
-    from app.services.interview import process_job_sync
-
-    result = await process_job_sync(
-        db=db,
-        job_id=job.id,
-        payload=payload,
+    # -------------------------
+    # RETURN FINAL REPORT IF READY
+    # -------------------------
+    cached_report = await async_redis_client.get(
+        f"session_result:{session_id}"
     )
 
+    if cached_report:
+        return json.loads(cached_report)
+
+    # -------------------------
+    # FAILED JOB
+    # -------------------------
+    if job.status == "failed":
+        return {
+            "status": "failed",
+            "message": "Processing failed",
+        }
+
+    # -------------------------
+    # STILL PROCESSING
+    # -------------------------
+    if job.status != "done":
+
+        payload_cache = await async_redis_client.get(
+            f"job_payload:{job_id}"
+        )
+
+        if not payload_cache:
+            return {
+                "status": "processing",
+                "message": "Job initializing...",
+            }
+
+        payload = json.loads(payload_cache)
+
+        # continue processing pipeline
+        from app.services.interview import process_job_sync
+
+        return await process_job_sync(
+            db=db,
+            job_id=job_id,
+            payload=payload,
+        )
+
+    # -------------------------
+    # DONE BUT REPORT NOT IN CACHE
+    # -------------------------
+    return {
+        "status": "processing",
+        "message": "Final report generating...",
+    }
 
 
-    if job.status == "done":
-        cached = await async_redis_client.get(f"session_result:{session_id}")
-        if cached:
-            return json.loads(cached)
+# async def get_session_result(
+#     db: Session,
+#     session_id: int,
+#     job_id: int,
+# ) -> dict[str, Any]:
+    
+#     job = db.get(Job, job_id)
+#     if not job:
+#         raise HTTPException(
+#             status_code=status.HTTP_404_NOT_FOUND,
+#             detail="Job not found",
+#         )
+    
 
-    return result
+#     payload_cache = await async_redis_client.get(f"job_payload:{job_id}")
+#     if not payload_cache:
+#         return {
+#             "status": "processing",
+#             "message": "Job still initializing...",
+#         }
 
-  
-   
+#     payload = json.loads(payload_cache)
+
+#     # Import here to avoid circular import at module load time
+#     from app.services.interview import process_job_sync
+
+#     result = await process_job_sync(
+#         db=db,
+#         job_id=job.id,
+#         payload=payload,
+#     )
+
+
+
+#     if job.status == "done":
+#         cached = await async_redis_client.get(f"session_result:{session_id}")
+#         if cached:
+#             return json.loads(cached)
+
+#     return result
+
+
 async def submit_final_attempt(
     db: Session,
-    job_id: int,
+    session_id: int,
     audio_url: str,
     duration_seconds: int,
     size_bytes: int,
 ) -> dict[str, Any]:
-    
-    job = db.get(Job, job_id)
 
-    attempt = db.get(Attempt, job.attempt_id)
-    if not attempt:
-        raise HTTPException(404, "Attempt not found")
+    # Find initial attempt
+    initial_attempt = db.exec(
+        select(Attempt).where(
+            Attempt.session_id == session_id,
+            Attempt.stage == AttemptStage.INITIAL,
+        )
+    ).first()
 
-    if attempt.stage != AttemptStage.INITIAL:
+    if not initial_attempt:
         raise HTTPException(
-            status_code=400,
-            detail="Final analysis can only be created from initial attempt",
+            status_code=404,
+            detail="Initial attempt not found",
         )
 
-    # create job (DB only metadata)
+    # Ensure initial analysis exists first
+    if not initial_attempt.analysis:
+        raise HTTPException(
+            status_code=400,
+            detail="Initial analysis not completed yet",
+        )
+
+    # Prevent duplicate final attempts
+    existing_final = db.exec(
+        select(Attempt).where(
+            Attempt.session_id == session_id,
+            Attempt.stage == AttemptStage.FINAL,
+        )
+    ).first()
+
+    if existing_final:
+        raise HTTPException(
+            status_code=400,
+            detail="Final attempt already submitted",
+        )
+
+    # Create new processing job
     job = Job(
         status="pending",
-        attempt_id=attempt.id,
-        session_id=attempt.session_id,
-        audio_url=audio_url,
-        duration_seconds=duration_seconds,
-        size_bytes=size_bytes,
+        session_id=session_id,
     )
 
     db.add(job)
-    db.commit()
-    db.refresh(job)
+    db.flush()
 
-    # store execution payload in Redis
     payload = {
-        "job_id": job.id,
-        "attempt_id": attempt.id,
-        "session_id": attempt.session_id,
-        "user_id": attempt.user_id,
-        "question_id": attempt.question_id,
+        "step": 1,
+        "session_id": session_id,
+        "user_id": initial_attempt.user_id,
+        "question_id": initial_attempt.question_id,
         "audio_url": audio_url,
         "duration_seconds": duration_seconds,
         "size_bytes": size_bytes,
+        "stage": AttemptStage.FINAL.value,
     }
 
     await async_redis_client.set(
@@ -414,10 +498,73 @@ async def submit_final_attempt(
         ex=3600,
     )
 
+    db.commit()
+
     return {
         "job_id": job.id,
-        "session_id": attempt.session_id,
+        "session_id": session_id,
         "message": "Final attempt submitted successfully.",
     }
+
+
+  
+   
+# async def submit_final_attempt(
+#     db: Session,
+#     job_id: int,
+#     audio_url: str,
+#     duration_seconds: int,
+#     size_bytes: int,
+# ) -> dict[str, Any]:
+    
+#     job = db.get(Job, job_id)
+
+#     attempt = db.get(Attempt, job.attempt_id)
+#     if not attempt:
+#         raise HTTPException(404, "Attempt not found")
+
+#     if attempt.stage != AttemptStage.INITIAL:
+#         raise HTTPException(
+#             status_code=400,
+#             detail="Final analysis can only be created from initial attempt",
+#         )
+
+#     # create job (DB only metadata)
+#     job = Job(
+#         status="pending",
+#         attempt_id=attempt.id,
+#         session_id=attempt.session_id,
+#         audio_url=audio_url,
+#         duration_seconds=duration_seconds,
+#         size_bytes=size_bytes,
+#     )
+
+#     db.add(job)
+#     db.commit()
+#     db.refresh(job)
+
+#     # store execution payload in Redis
+#     payload = {
+#         "step": 1,
+#         "session_id": attempt.session_id,
+#         "user_id": attempt.user_id,
+#         "question_id": attempt.question_id,
+#         "audio_url": audio_url,
+#         "duration_seconds": duration_seconds,
+#         "size_bytes": size_bytes,
+#         "stage": AttemptStage.FINAL.value,
+#     }
+
+#     await async_redis_client.set(
+#         f"job_payload:{job.id}",
+#         json.dumps(payload),
+#         ex=3600,
+#     )
+
+#     return {
+#         "job_id": job.id,
+#         "session_id": attempt.session_id,
+#         "message": "Final attempt submitted successfully.",
+#     }
 
 

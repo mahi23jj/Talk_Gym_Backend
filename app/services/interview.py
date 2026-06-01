@@ -671,7 +671,7 @@ async def process_job_sync(
                 recording_id=recording.id,
                 transcript=recording.transcription,
                 session_id=payload["session_id"],
-                stage=AttemptStage.INITIAL,
+                stage=AttemptStage(payload.get("stage")),
             )
 
             db.add(attempt)
@@ -686,12 +686,7 @@ async def process_job_sync(
 
             db.add(analysis)
 
-            job.status = "done"
-            job.attempt_id = attempt.id
-
-            db.add(job)
-            db.commit()
-
+           
             result = {
                 "attempt_id": attempt.id,
                 "analysis": _build_attempt_analysis_response(
@@ -700,11 +695,48 @@ async def process_job_sync(
                 ),
             }
 
+            if payload.get("stage") == AttemptStage.FINAL.value:
+
+                initial_attempt = db.exec(
+                    select(Attempt)
+                    .where(
+                        Attempt.session_id == payload["session_id"],
+                        Attempt.stage == AttemptStage.INITIAL,
+                    )
+                    .options(selectinload(Attempt.analysis))
+                ).first()
+
+                if initial_attempt and initial_attempt.analysis:
+
+                    report = build_interview_report(
+                        initial_attempt=initial_attempt,
+                        final_attempt=attempt,
+                        initial_analysis=initial_attempt.analysis,
+                        final_analysis=analysis,
+                    )
+
+                    await async_redis_client.set(
+                        f"session_result:{payload['session_id']}",
+                        json.dumps(report, default=str),
+                        ex=3600,
+                    )
+
+                    return {
+                        "status": "done",
+                        "analysis": report,
+                        }
+
             await async_redis_client.set(
                 f"attempt_result:{job_id}",
                 json.dumps(result, default=str),
                 ex=3600,
             )
+
+            job.status = "done"
+            job.attempt_id = attempt.id
+
+            db.add(job)
+            db.commit()
 
             return {
                 "status": "done",
@@ -759,6 +791,7 @@ async def submit_normal_attempt(
             "audio_url": audio_url,
             "duration_seconds": duration_seconds,
             "size_bytes": size_bytes,
+            "stage": AttemptStage.INITIAL.value,
         }
 
         await async_redis_client.set(

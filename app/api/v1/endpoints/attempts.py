@@ -17,6 +17,7 @@ from app.core.config import settings
 from app.db.postgran import get_session
 from app.models.auth import User
 from app.models.interview import Attempt, InterviewSession
+from app.models.job import Job
 from app.schemas.interview import AttemptSubmitSchema
 from app.schemas.workflow import (
     AttemptEnqueueResponse,
@@ -165,18 +166,23 @@ async def submit_final_attempt_route(
     data: AttemptSubmitSchema,
     user_id: int = Depends(get_current_user_id),
     db=Depends(get_session),
-):
-   
-    # attempt = db.get(Attempt, attempt_id)
-    # if not attempt:
-    #     raise HTTPException(
-    #         status_code=status.HTTP_404_NOT_FOUND, detail="Attempt not found"
-    #     )
-    # if attempt.user_id != user_id:
-    #     raise HTTPException(
-    #         status_code=status.HTTP_403_FORBIDDEN,
-    #         detail="Attempt does not belong to user",
-    #     )
+): 
+
+    job = db.get(Job , attempt_id)
+
+    if not job:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Job not found",
+        )
+
+
+
+    if job.session_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Attempt is not linked to an interview session",
+        )
 
     await FastRateLimiter.enforce(
         user_id=user_id,
@@ -208,7 +214,7 @@ async def submit_final_attempt_route(
 
     return await submit_final_attempt(
         db=db,
-        job_id=attempt_id,
+        session_id=job.session_id,
         audio_url=data.audio_url,
         duration_seconds=data.duration_seconds,
         size_bytes=data.size_bytes,

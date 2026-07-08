@@ -160,15 +160,15 @@ async def submit_attempt(
     return result
 
 # response_model=FinalAttemptSubmitResponse
-@router.post("/submit/final/{attempt_id}")
+@router.post("/submit/final/{job_id}")
 async def submit_final_attempt_route(
-    attempt_id: int,
+    job_id: int,
     data: AttemptSubmitSchema,
     user_id: int = Depends(get_current_user_id),
     db=Depends(get_session),
-): 
+):
 
-    job = db.get(Job , attempt_id)
+    job = db.get(Job, job_id)
 
     if not job:
         raise HTTPException(
@@ -176,9 +176,21 @@ async def submit_final_attempt_route(
             detail="Job not found",
         )
 
+    if not job.attempt_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Job has no linked attempt",
+        )
 
+    attempt = db.get(Attempt, job.attempt_id)
 
-    if job.session_id is None:
+    if not attempt:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Attempt not found",
+        )
+
+    if attempt.session_id is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Attempt is not linked to an interview session",
@@ -191,21 +203,12 @@ async def submit_final_attempt_route(
         window_seconds=60,
     )
 
-    # await validate_audio_constraints(
-    #     db=db,
-    #     user_id=user_id,
-    #     size_bytes=size_bytes,
-    #     duration_seconds=duration_seconds,
-    #     max_size_bytes=settings.max_audio_size_bytes,
-    #     max_duration_seconds=settings.max_audio_duration_seconds,
-    #     daily_upload_limit=40,
-    # )
-
     if data.duration_seconds > settings.max_audio_duration_seconds:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Audio duration exceeds limit of {settings.max_audio_duration_seconds} seconds",
         )
+
     if data.duration_seconds <= 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -214,7 +217,7 @@ async def submit_final_attempt_route(
 
     return await submit_final_attempt(
         db=db,
-        session_id=job.session_id,
+        session_id=attempt.session_id,
         audio_url=data.audio_url,
         duration_seconds=data.duration_seconds,
         size_bytes=data.size_bytes,

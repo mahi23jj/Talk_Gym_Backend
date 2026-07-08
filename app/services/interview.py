@@ -95,6 +95,24 @@ def _build_cached_analysis_response(
     }
 
 
+def _normalize_analysis_payload(
+    payload: dict[str, Any],
+    *,
+    analysis_row: InterviewAnalysis | None = None,
+    job: Job | None = None,
+) -> dict[str, Any]:
+    normalized = dict(payload)
+
+    analysis_id = normalized.get("id") or normalized.get("analysis_id")
+    if analysis_id is None and analysis_row is not None:
+        analysis_id = analysis_row.id
+    if analysis_id is None and job is not None:
+        analysis_id = job.attempt_id or job.id
+
+    normalized["id"] = analysis_id
+    return normalized
+
+
 def _fallback_voice_metrics() -> dict[str, Any]:
     return {
         "confidence": {"score": 0.0, "level": "Needs Improvement"},
@@ -596,31 +614,31 @@ async def process_job_sync(
             return {"status": "processing", "step": 2}
 
 
-        if step == 3:
+        # if step == :
 
-            local_audio = payload["local_audio"]
+            # local_audio = payload["local_audio"]
 
-            voice_features = await asyncio.to_thread(
-                extract_voice_features,
-                local_audio,   # ✅ LOCAL PATH ONLY
-            )
+            # voice_features = await asyncio.to_thread(
+            #     extract_voice_features,
+            #     local_audio,   # ✅ LOCAL PATH ONLY
+            # )
 
-            payload["voice_features"] = voice_features
-            payload["step"] = 4
+            # payload["voice_features"] = voice_features
+            # payload["step"] = 4
 
-            await async_redis_client.set(
-                f"job_payload:{job_id}",
-                json.dumps(payload),
-                ex=3600,
-            )
+            # await async_redis_client.set(
+            #     f"job_payload:{job_id}",
+            #     json.dumps(payload),
+            #     ex=3600,
+            # )
 
-            return {"status": "processing", "message": "Voice analysis ready"}
+            # return {"status": "processing", "message": "Voice analysis ready"}
 
 
         # -------------------------
         # STEP 3: AI ANALYSIS + SAVE
         # -------------------------
-        if step == 4:
+        if step == 3:
 
             question = db.get(Question, payload["question_id"])
 
@@ -630,7 +648,7 @@ async def process_job_sync(
             )
 
             voice_metrics = _fallback_voice_metrics()
-            try:
+            """ try:
                 voice_features = payload.get("voice_features")
                 if isinstance(voice_features, dict):
                     voice_metrics = build_voice_metrics(
@@ -647,7 +665,7 @@ async def process_job_sync(
                 logger.exception(
                     "Failed to build voice metrics for job_id=%s; using fallback metrics",
                     job_id,
-                )
+                ) """
 
             analysis_payload["voice_metrics"] = voice_metrics
 
@@ -685,6 +703,7 @@ async def process_job_sync(
             )
 
             db.add(analysis)
+            db.flush()
 
            
             result = {
@@ -725,18 +744,20 @@ async def process_job_sync(
                         "status": "done",
                         "analysis": report,
                         }
+            
+            job.status = "done"
+            job.attempt_id = attempt.id
+
+
+            db.add(job)
+            db.commit()
+
 
             await async_redis_client.set(
                 f"attempt_result:{job_id}",
                 json.dumps(result, default=str),
                 ex=3600,
             )
-
-            job.status = "done"
-            job.attempt_id = attempt.id
-
-            db.add(job)
-            db.commit()
 
             return {
                 "status": "done",
@@ -849,6 +870,11 @@ async def get_attempt_result(db: Session, job_id: int):
             try:
                 cached_data = json.loads(cached)
                 if cached_data and "analysis" in cached_data:
+                    cached_data["analysis"] = _normalize_analysis_payload(
+                        cached_data["analysis"],
+                        analysis_row=analysis_row,
+                        job=job,
+                    )
                     return cached_data
             except Exception:
                 pass  # ignore broken cache
@@ -912,7 +938,13 @@ async def get_analysis_result(db: Session, job_id: int) -> dict[str, Any]:
     if cached:
         data = json.loads(cached)
         if isinstance(data, dict) and "analysis" in data:
-            return {"status": "done", "analysis": data["analysis"]}
+            return {
+                "status": "done",
+                "analysis": _normalize_analysis_payload(
+                    data["analysis"],
+                    job=job,
+                ),
+            }
 
         return {
             "status": "done",
